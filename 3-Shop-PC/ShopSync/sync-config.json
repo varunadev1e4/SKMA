@@ -1,0 +1,8 @@
+{
+  "supabase_url": "https://YOUR-PROJECT.supabase.co",
+  "supabase_key": "PASTE-SECRET-KEY-HERE",
+  "backup_folder": "",
+  "data_file": "",
+  "live_mdb": "",
+  "home_state": ""
+}

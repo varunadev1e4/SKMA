@@ -1,0 +1,229 @@
+import { useCallback, useEffect, useState } from 'react'
+import { useBackLayer } from './backstack'
+import { supabase } from './supabase'
+import { rs, APP, SHOP, fetchPaged } from './util'
+import { Mark } from './Logo'
+import MonthPick, { curYm, ymName } from './MonthPick'
+import { askConfirm, showMsg } from './dialog'
+import { inMonth, leaveBalance } from './staffcalc'
+import AttCalendar from './AttCalendar'
+import { STAFF_CATS, iso, dm, span } from './expcommon'
+import { Tasks, TagBill, Report, ReturnNote, RequestMoney, CountSheets } from './StaffTools'
+import { BUILD } from './version'
+import ChangePassword from './ChangePassword'
+import { pushSupported, pushOn, enablePush } from './push'
+import Attendance from './Attendance'
+import TempBill from './TempBill'
+import Inbox from './Inbox'
+import Expenses from './Expenses'
+import Parties from './Parties'
+import { ActivityPage } from './ActivityLog'
+
+// The only screen an employee login can open. The database enforces this: an employee login cannot read
+// stock, customers, sales, profit or anyone else's records.
+
+const inp = { className: 'fsel', style: { width: '100%', boxSizing: 'border-box' } }
+
+function AddExpense({ emp, uid, balance, onSaved }) {
+  const [cat, setCat] = useState('')
+  const [amt, setAmt] = useState('')
+  const [d, setD] = useState(iso(new Date()))
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const save = async () => {
+    const category = cat.trim(), amount = Number(amt)
+    if (!(amount > 0)) return setErr('Enter the amount.')
+    if (!category) return setErr('Tap what it was for.')
+    setBusy(true); setErr('')
+    const { error } = await supabase.from('expenses').insert({ d, category, amount, note: note || null, emp_id: emp.id, created_by: uid })
+    setBusy(false)
+    if (error) return setErr('Could not save: ' + error.message)
+    setCat(''); setAmt(''); setNote(''); onSaved(category + ' ' + rs(amount) + ' saved')
+  }
+  return (
+    <>
+      <div className="chartcard" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <span>Shop fund balance</span>
+        <b style={{ fontSize: 22, color: balance != null && balance < 0 ? 'var(--bad)' : undefined }}>{balance == null ? '...' : rs(balance)}</b>
+      </div>
+      <div className="chartcard" style={{ display: 'grid', gap: 8 }}>
+        <input {...inp} type="number" inputMode="decimal" placeholder="Amount" value={amt} onChange={(e) => setAmt(e.target.value)} />
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{STAFF_CATS.map((c) => <button key={c} className={'qc' + (cat === c ? ' on' : '')} onClick={() => setCat(c)}>{c}</button>)}</div>
+        <input {...inp} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+        <label className="muted small">Date<input {...inp} type="date" value={d} max={iso(new Date())} onChange={(e) => setD(e.target.value)} /></label>
+        {err && <p className="error">{err}</p>}
+        <button className="primary" disabled={busy} onClick={save}>{busy ? 'Saving...' : 'Save expense'}</button>
+      </div>
+    </>
+  )
+}
+
+function Recent({ rows, reload }) {
+  const del = async (r) => {
+    if (!await askConfirm('Delete ' + r.category + ' ' + rs(r.amount) + '? It will go back into the fund.')) return
+    const { error } = await supabase.from('expenses').delete().eq('id', r.id)
+    if (error) return showMsg('Could not delete: ' + error.message)
+    reload()
+  }
+  const editable = (r) => Date.now() - new Date(r.created_at).getTime() < 864e5
+  if (!rows.length) return <p className="muted small">You have not entered any expenses this month.</p>
+  return rows.map((r) => (
+    <div key={r.id} className="chartcard" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+      <span><b>{dm(r.d)}</b> {r.category}{r.note ? <span className="muted small"> | {r.note}</span> : ''}</span>
+      <span><b>{rs(r.amount)}</b> {editable(r) && <button className="ghost sm" onClick={() => del(r)}>x</button>}</span>
+    </div>))
+}
+
+function MyAttendance({ emp, entries }) {
+  const [ym, setYm] = useState(curYm())
+  const mine = entries.filter((e) => inMonth(e.d, ym))
+  const nA = mine.filter((e) => e.kind === 'absent').length, nH = mine.filter((e) => e.kind === 'half').length, nP = mine.filter((e) => e.kind === 'paidleave').length
+  const lb = leaveBalance(emp, entries.map((e) => ({ ...e, emp_id: emp.id })), ym)
+  return (
+    <>
+      <MonthPick ym={ym} onChange={setYm} />
+      <AttCalendar ym={ym} entries={entries} join={emp.join_date} leave={emp.leave_date} />
+      <div className="minis" style={{ marginTop: 10 }}>
+        <div className="mini"><span>Absent</span><b>{nA}</b></div>
+        <div className="mini"><span>Half days</span><b>{nH}</b></div>
+        <div className="mini"><span>Paid leave</span><b>{nP}</b></div>
+      </div>
+      {lb.quota > 0 && <p className="muted small" style={{ marginTop: 10 }}>Paid leaves this financial year: used {lb.used} of {lb.quota}, {Math.max(0, lb.left)} left.</p>}
+      <p className="muted small">Attendance is marked by the owner. If something is wrong, tell the owner.</p>
+    </>)
+}
+
+// Extra tiles for a Desk login (an employee login with the Desk switch on)
+const DESK_TILES = [
+  ['dslip', 'Cash slip', 'Needs owner approval', '#0f766e', '\u{1F9FE}'],
+  ['dstock', 'Stock', 'Batches, expiry, rack', '#0369a1', '\u{1F4E6}'],
+  ['dattend', 'Mark attendance', 'For everyone', '#0891b2', '\u{1F9D1}\u200D\u{1F4BC}'],
+  ['ddeliv', 'Deliveries', 'Assign and tag bills', '#be123c', '\u{1F4CB}'],
+  ['dinbox', 'Reports, returns, tasks', 'Reply and set tasks', '#4338ca', '\u{1F4E5}'],
+  ['dexp', 'Shop expenses', 'Everyone\'s spending, fund', '#15803d', '\u{1F9FE}'],
+  ['dact', 'Activity log', 'Who did what', '#475569', '\u{1F55B}'],
+]
+// Extra tile for an Accountant login: receivables only
+const ACCT_TILES = [['acct', 'Receivables', 'Who owes us, share PDF', '#b45309', '\u{1F4D2}']]
+
+// Each tile has its own colour and a big picture, so it can be recognised without reading
+const TILES = [
+  ['exp', 'Add expense', 'Spend from the shop fund', '#16a34a', '\u{1F4B8}'],
+  ['tasks', 'Today\'s tasks', '', '#2563eb', '\u2705'],
+  ['tag', 'My deliveries', 'Bills sent with you, or tag one', '#ea580c', '\u{1F69A}'],
+  ['report', 'Suggest / report', 'Low stock, new product, problem', '#7c3aed', '\u{1F4A1}'],
+  ['ret', 'Sales return note', 'Expired or damaged goods', '#dc2626', '\u{1F4E6}'],
+  ['count', 'Stock count', '', '#0d9488', '\u{1F522}'],
+  ['req', 'Request money', 'Ask for fund top-up', '#ca8a04', '\u{1F4B0}'],
+  ['att', 'My attendance', '', '#db2777', '\u{1F4C5}'],
+]
+const ALL_TILES = [...DESK_TILES, ...ACCT_TILES, ...TILES]
+const TITLE = Object.fromEntries(ALL_TILES.map((t) => [t[0], t[1]]))
+const COLOR = Object.fromEntries(ALL_TILES.map((t) => [t[0], t[3]]))
+const ICON = Object.fromEntries(ALL_TILES.map((t) => [t[0], t[4]]))
+
+export default function StaffApp({ session, empId, desk, acct, stockScreen }) {
+  const [tab, setTab] = useState('home')
+  useBackLayer(tab !== 'home', () => { setTab('home') })
+  const [emp, setEmp] = useState(null)
+  const [exps, setExps] = useState([])
+  const [ents, setEnts] = useState([])
+  const [balance, setBalance] = useState(null)
+  const [nTasks, setNTasks] = useState(0)
+  const [nCount, setNCount] = useState(0)
+  const [push, setPush] = useState(pushSupported() ? 'ask' : 'none')
+  const [err, setErr] = useState('')
+  const [ok, setOk] = useState('')
+  const uid = session.user.id
+
+  const load = useCallback(async () => {
+    const [a, b, e, f, t, c] = await Promise.all([
+      supabase.from('employees').select('*').eq('id', empId).limit(1),
+      fetchPaged('expenses', '*').then((data) => ({ data: data.sort((x, y) => String(y.d).localeCompare(String(x.d)) || y.id - x.id) })).catch((error) => ({ error })),
+      fetchPaged('emp_entries', '*', (q) => q.eq('emp_id', empId)).then((data) => ({ data: data.sort((x, y) => String(x.d).localeCompare(String(y.d))) })).catch((error) => ({ error })),
+      supabase.rpc('fund_balance'),
+      supabase.from('emp_tasks').select('id').eq('done', false).or('emp_id.eq.' + empId + ',emp_id.is.null'),
+      supabase.from('counts').select('id').eq('status', 'open'),
+    ])
+    const bad = [a, b, e].find((x) => x.error)
+    if (bad) return setErr(bad.error.message)
+    setErr(''); setEmp(a.data[0] || null); setExps(b.data); setEnts(e.data)
+    if (!f.error) setBalance(f.data == null ? null : Number(f.data))
+    if (!t.error) setNTasks(t.data.length)
+    if (!c.error) setNCount(c.data.length)
+  }, [empId])
+  useEffect(() => { load() }, [load])
+  useEffect(() => { pushOn().then((on) => on && setPush('on')) }, [])
+  // Keep the shared balance fresh: every 30 seconds and whenever the app comes back to the front
+  useEffect(() => {
+    const t = setInterval(() => { if (!document.hidden) load() }, 30000)
+    const v = () => { if (!document.hidden) load() }
+    document.addEventListener('visibilitychange', v)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', v) }
+  }, [load])
+
+  const ym = curYm(), sp = span(ym)
+  const monthRows = exps.filter((x) => x.d >= sp.from && x.d <= sp.to)
+  const saved = (msg) => { setOk(msg); setTimeout(() => setOk(''), 3000); load() }
+  const turnOn = async () => { const r = await enablePush('staff', empId); if (r === true) setPush('on'); else showMsg(r) }
+  const [pwOpen, setPwOpen] = useState(false)
+  const badge = { tasks: nTasks, count: nCount }
+
+  if (!emp && !err) return <p className="muted pad">Loading...</p>
+  if (desk && tab === 'dattend') return <Attendance desk back={() => setTab('home')} />
+  if (desk && tab === 'ddeliv') return <Inbox desk start="del" back={() => setTab('home')} />
+  if (desk && tab === 'dinbox') return <Inbox desk start="rep" back={() => setTab('home')} />
+  if (desk && tab === 'dexp') return <Expenses readOnly back={() => setTab('home')} />
+  if (desk && tab === 'dslip') return <TempBill desk empId={empId} back={() => setTab('home')} />
+  if (desk && tab === 'dstock') return <div><div style={{ padding: '12px 16px 0' }}><button className="ghost sm" onClick={() => setTab('home')}>Back</button></div>{stockScreen}</div>
+  if (desk && tab === 'dact') return <ActivityPage desk back={() => setTab('home')} />
+  if (acct && tab === 'acct') return <Parties acct back={() => setTab('home')} />
+  return (
+    <div className="app">
+      <header className="top">
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><Mark size={38} id="staff" /><div><div className="muted small">{SHOP}</div><h1 className="h1" style={{ fontSize: 20 }}>{emp ? emp.name : APP}</h1></div></div>
+        <div style={{ display: 'flex', gap: 6 }}><button className="ghost sm" onClick={() => setPwOpen(true)}>Password</button>
+        <button className="ghost sm" onClick={() => supabase.auth.signOut()}>Sign out</button></div>
+      </header>
+      {pwOpen && <ChangePassword onClose={() => setPwOpen(false)} />}
+      {err && <p className="error pad">{err}</p>}
+      {ok && <p className="pad" style={{ color: 'var(--good)', fontWeight: 600 }}>{ok}</p>}
+      {emp && tab === 'home' && (
+        <>
+          <div className="chartcard" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '10px 0' }}>
+            <span>Shop fund balance</span><b style={{ fontSize: 22, color: balance != null && balance < 0 ? 'var(--bad)' : undefined }}>{balance == null ? '...' : rs(balance)}</b>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {[...(desk ? DESK_TILES : []), ...(acct ? ACCT_TILES : []), ...TILES].map(([k, l, s, c, ic]) => (
+              <button key={k} className="chartcard" style={{ textAlign: 'left', border: 0, display: 'grid', gap: 4, minHeight: 104, background: c, color: '#fff', alignContent: 'start' }} onClick={() => setTab(k)}>
+                <span style={{ fontSize: 34, lineHeight: 1 }}>{ic}</span>
+                <b style={{ fontSize: 16 }}>{l}{badge[k] > 0 ? <span style={{ background: '#fff', color: c, borderRadius: 10, padding: '0 7px', marginLeft: 6, fontSize: 13 }}>{badge[k]}</span> : ''}</b>
+                <span style={{ fontSize: 12, opacity: 0.92 }}>{k === 'tasks' ? (nTasks ? nTasks + ' to do' : 'Nothing pending') : k === 'count' ? (nCount ? nCount + ' count sheet(s)' : 'None right now') : k === 'att' ? 'Present, leave, balance' : s}</span>
+              </button>))}
+          </div>
+          {push === 'ask' && <button className="ghost" style={{ marginTop: 12 }} onClick={turnOn}>Turn on notifications</button>}
+          {push === 'on' && <p className="muted small" style={{ marginTop: 12 }}>Notifications are on for this phone.</p>}
+          <p className="muted small" style={{ marginTop: 6 }}>Version {BUILD}</p>
+        </>)}
+      {emp && tab !== 'home' && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 12px' }}><button className="ghost sm" onClick={() => { setTab('home'); load() }}>Back</button><h2 className="h2" style={{ margin: 0, color: COLOR[tab] }}>{ICON[tab]} {TITLE[tab]}</h2></div>
+          {tab === 'exp' && (
+            <>
+              <AddExpense emp={emp} uid={uid} balance={balance} onSaved={saved} />
+              <h2 className="h2" style={{ marginTop: 14 }}>My entries, {ymName(ym)}</h2>
+              <Recent rows={monthRows} reload={load} />
+            </>)}
+          {tab === 'tasks' && <Tasks onChange={setNTasks} empId={empId} />}
+          {tab === 'tag' && <TagBill empId={empId} />}
+          {tab === 'report' && <Report emp={emp} />}
+          {tab === 'ret' && <ReturnNote emp={emp} />}
+          {tab === 'count' && <CountSheets onChange={load} />}
+          {tab === 'req' && <RequestMoney emp={emp} balance={balance} />}
+          {tab === 'att' && <MyAttendance emp={emp} entries={ents} />}
+        </>)}
+    </div>
+  )
+}

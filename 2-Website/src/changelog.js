@@ -1,0 +1,23 @@
+// Version history shown in Menu > About. Add a new entry at the TOP every time you change version.js.
+export const CHANGELOG = [
+  { v: 41, d: '25 Nov 2026', t: ['Fix for being asked to log in again after every reload on a phone with full storage: offline copies of lists are now size-limited and cleared automatically when storage is full, so the login is always saved'] },
+  { v: 40, d: '25 Nov 2026', t: ['Deliveries: the Desk sees recent bills with the customer and the products (no amounts) and sends each one out with an employee; the employee sees those bills in My deliveries with customer, city and products, and cannot remove a bill the Desk assigned'] },
+  { v: 39, d: '25 Nov 2026', t: ['Desk login can now make a cash slip (temporary bill) and browse the stock screen (no cost price or margin). The slip goes to an owner, who approves or rejects it under Temporary bill > To approve; the Desk can share the PDF only after approval'] },
+  { v: 38, d: '25 Nov 2026', t: ['New Accountant login: an employee login that can also see receivables only (who owes how much, pending bills, party statements) and share them as PDF', 'Desk login can now also view all expenses, the shop fund and a limited activity log (read only)'] },
+  { v: 37, d: '25 Nov 2026', t: ['New Desk login: an employee login that can also mark attendance for everyone, assign and tag bill deliveries, and handle reports, return notes and tasks (Staff > employee > Desk login). It cannot see profit, stock, parties, salaries or the shop fund'] },
+  { v: 36, d: '24 Nov 2026', t: ['Change password for owners (Menu > Change password) and employees (Password button on their screen)'] },
+  { v: 35, d: '24 Nov 2026', t: ['Fix for being logged out at random: login refreshes are no longer cut short, only one refresh runs at a time, and the login is refreshed when you come back to the app'] },
+  { v: 34, d: '24 Nov 2026', t: ['Blister look removed; the app uses the original look again (the Menu > Look option is gone)', 'Bottom menu bar is lighter than the page in dark mode so it is easy to see'] },
+  { v: 33, d: '24 Nov 2026', t: ['The phone Back button now goes back inside the app (closes the open screen, dialog or menu); on Home, press it twice to exit'] },
+  { v: 32, d: '24 Nov 2026', t: ['Home greets you by name; set your name in Menu > About > Name'] },
+  { v: 31, d: '24 Nov 2026', t: ['New Blister look: foil-white cards, teal accent, collected-today ring, stock dots and a floating tab bar, in light and dark', 'Menu > Look switches between Blister and the Classic look at any time'] },
+  { v: 30, d: '24 Nov 2026', t: ['New About screen in the menu with version history and app information'] },
+  { v: 29, d: '24 Nov 2026', t: ['Top bar shows when your data was last updated and the app version', 'Large lists no longer stop at 1000 rows (staff entries, expenses, stock counts, delivery tags)', 'Automatic checks for salary, advance, leave and bill-number rules'] },
+  { v: 28, d: '24 Nov 2026', t: ['Removed the extra refresh buttons on Stock, Parties and Expiry (use the menu)', 'Share a bill opens on Today', 'App reloads itself after an update if the PDF tools were replaced'] },
+  { v: 27, d: '24 Nov 2026', t: ['Fixed top bar with the notification bell and menu on every screen', 'Menu rebuilt so Refresh and Sign out work on laptops too'] },
+  { v: 26, d: '24 Nov 2026', t: ['Cleaner Home, Staff and Inbox with fewer buttons', 'Activity log opens from Home > More options', 'Weekly summary shows deliveries as a total', 'Employee screen with a different colour and picture for each button'] },
+  { v: 25, d: '24 Nov 2026', t: ['Not yet delivered list with assign and no-delivery options', 'Bill numbers typed with the letter O now match zero', 'Temp returns button removed from Home (employees enter return notes)'] },
+  { v: 24, d: '24 Nov 2026', t: ['Delivery follow-up, Activity log (who changed what) and Weekly summary'] },
+  { v: 23, d: 'Nov 2026', t: ['Employee logins with strict access, shop fund, tasks, suggestions and reports, return notes, blind stock count, delivery tagging, money requests, push notifications, staff analytics and attendance calendar'] },
+  { v: 0, d: 'Earlier', t: ['Stock, expiry, parties and dues, profit and margin reports, CA and GST, bill copy PDFs, WhatsApp sharing, temporary bills, collections, staff salary and advances, expenses, directory'] },
+]
