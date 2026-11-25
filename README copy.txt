@@ -29,35 +29,6 @@
  If the file names look different, STOP and ask before continuing.
 
 ---------------------------------------------------------------------
- B3. On the next page click "uploading an existing file".
- B4. Open the kit folder 2-Website. Select EVERYTHING INSIDE it (Ctrl+A):
-     package.json, index.html, vite.config.js and the folders src, public, checks.
-     Drag them into the GitHub page. Wait for the upload bar. Commit changes.
-     YOU SHOULD SEE: package.json and the folders src and public at the top of the
-     repository. If you see only one folder called "2-Website", you dragged the folder
-     itself: delete the repository (Settings, bottom) and do B2-B4 again.
- B5. vercel.com > Sign Up > Continue with GitHub (free Hobby plan).
-     Add New > Project > Import shop-app. Leave the framework as Vite.
-     Open "Environment Variables" and add these (Name | Value), Add after each:
-        VITE_SUPABASE_URL        your Project URL
-        VITE_SUPABASE_ANON_KEY   your PUBLISHABLE key (never the secret key)
-        VITE_APP_NAME            SKMA
-        VITE_SHOP_NAME           full shop name
-        VITE_GSTIN               GST number
-        VITE_SHOP_ADDR1          address line 1 (printed on bill copies)
-        VITE_SHOP_ADDR2          address line 2 with town and PIN
-        VITE_SHOP_PHONE          shop phone
-        VITE_SHOP_DL             licences separated by |   e.g. 20B:TS/123|21B:TS/124
-        VITE_SHOP_BANK           bank details line (optional)
-        VITE_SHOP_JURIS          town for "Subject to ... jurisdiction"
-     Click Deploy. Wait 1-2 minutes.  YOU SHOULD SEE confetti / "Congratulations".
-     (Changed a setting later? Deployments > ... > Redeploy.)
- B6. Click Visit. Copy the website address (xxx.vercel.app) into your notes.
- B7. TEST: open the address. YOU SHOULD SEE a login screen with the shop name.
-     Log in with an owner email and password. You see the app with no stock yet (correct).
- B8. On each phone/iPad/tablet: open the address in Chrome (Android) or Safari (iPhone/iPad),
-     log in, then Menu > Add to Home screen.
-
  ===== C.  THE SHOP COMPUTER =====
  C1. Copy the folder 3-Shop-PC\ShopSync to the C: drive: it must be exactly
      C:\ShopSync  (NOT on the Desktop, NOT in OneDrive or Documents).
