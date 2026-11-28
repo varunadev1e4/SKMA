@@ -288,7 +288,7 @@ const fyOf = (d) => String(Number(d.slice(0, 4)) - (Number(d.slice(5, 7)) < 4 ? 
 const addMonths = (s, n) => { const x = new Date(s + 'T00:00:00'); x.setMonth(x.getMonth() + n); return iso(x) }
 const norm = (no) => String(no || '').replace(/\s+/g, '').toUpperCase().replace(/O/g, '0')
 function FollowUp({ emps, onChange }) {
-  const [days, setDays] = useState(7)
+  const [days, setDays] = useState('today')   // today | yest | week
   const [creditOnly, setCreditOnly] = useState(false)
   const [rows, setRows] = useState(null)
   const [pick, setPick] = useState({})
@@ -297,8 +297,10 @@ function FollowUp({ emps, onChange }) {
   const [items, setItems] = useState({})   // bill number -> products on the bill (names and quantities only)
   const load = useCallback(async () => {
     setRows(null)
-    const from = iso(new Date(Date.now() - days * 864e5))
-    const h = await supabase.from(BILL_TABLE).select('feed_no,party,net,d,typ,city').gte('d', from).order('d', { ascending: false }).limit(1000)
+    const now = new Date(), day = (n) => iso(new Date(now.getFullYear(), now.getMonth(), now.getDate() - n))
+    const from = days === 'today' ? day(0) : days === 'yest' ? day(1) : day((now.getDay() + 6) % 7)   // this week starts on Monday
+    const to = days === 'yest' ? day(1) : day(0)
+    const h = await supabase.from(BILL_TABLE).select('feed_no,party,net,d,typ,city').gte('d', from).lte('d', to).order('d', { ascending: false }).limit(1000)
     if (h.error) { showMsg(h.error.message); return setRows([]) }
     // Ask only about the bills on screen (the server returns at most 1000 rows per request, so a plain "all tags" query would miss most of them)
     const nos = [...new Set(h.data.filter((x) => x.feed_no).flatMap((x) => [norm(x.feed_no), String(x.feed_no).trim().toUpperCase()]))]
@@ -342,12 +344,38 @@ function FollowUp({ emps, onChange }) {
     if (error) return showMsg(error.message)
     setTyped(''); load(); onChange && onChange()
   }
+  // One tap: every bill before today that is not tagged yet is marked "no delivery needed", so only new bills show from now on.
+  const clearOld = async () => {
+    if (!(await askConfirm('Mark ALL bills before today as delivered? Bills already tagged to a person keep their tag. This cannot be undone from here.'))) return
+    setRows(null)
+    try {
+      const today = iso(new Date()), heads = [], tagged = new Set()
+      for (let o = 0; ; o += 1000) {
+        const h = await supabase.from(BILL_TABLE).select('feed_no,d').lt('d', today).order('d').range(o, o + 999)
+        if (h.error) throw h.error
+        heads.push(...h.data); if (h.data.length < 1000) break
+      }
+      for (let o = 0; ; o += 1000) {
+        const t = await supabase.from('bill_tags').select('bill_no').order('id').range(o, o + 999)
+        if (t.error) throw t.error
+        t.data.forEach((x) => tagged.add(norm(x.bill_no))); if (t.data.length < 1000) break
+      }
+      const seen = new Set(), add = []
+      heads.forEach((x) => { if (!x.feed_no) return; const n = norm(x.feed_no), k = n + '|' + fyOf(x.d); if (tagged.has(n) || seen.has(k)) return; seen.add(k); add.push({ bill_no: n, fy: fyOf(x.d), note: 'cleared before ' + today }) })
+      for (let i = 0; i < add.length; i += 500) {
+        const { error } = await supabase.from('delivery_skip').upsert(add.slice(i, i + 500), { onConflict: 'bill_no,fy', ignoreDuplicates: true })
+        if (error) throw error
+      }
+      showMsg(add.length + ' older bills marked as delivered.')
+    } catch (e) { showMsg('Could not finish: ' + (e.message || e)) }
+    load()
+  }
   const skip = async (r) => {
     const { error } = await supabase.from('delivery_skip').insert({ bill_no: norm(r.feed_no), fy: fyOf(r.d) })
     if (error) return showMsg(error.message + ' (run migration-27.sql)')
     load()
   }
-  const build = () => ({ title: 'Bills not yet marked delivered', subtitle: 'Last ' + days + ' days' + (creditOnly ? ' | credit only' : ''), filename: 'undelivered-bills', columns: ['Date', 'Bill', 'Customer', 'Type', 'Amount'],
+  const build = () => ({ title: 'Bills not yet marked delivered', subtitle: ({ today: 'Today', yest: 'Yesterday', week: 'This week' })[days] + (creditOnly ? ' | credit only' : ''), filename: 'undelivered-bills', columns: ['Date', 'Bill', 'Customer', 'Type', 'Amount'],
     rows: list.map((r) => [dm(r.d), r.feed_no, r.party || '', r.typ || '', DESK_MODE ? '' : money(r.net)]), numCols: [4] })
   return (
     <div style={{ marginBottom: 14 }}>
@@ -359,9 +387,10 @@ function FollowUp({ emps, onChange }) {
           <button className="ghost sm" onClick={assignTyped}>Send out</button>
         </div>)}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-        {[3, 7, 14, 30].map((n) => <button key={n} className={'qc' + (days === n ? ' on' : '')} onClick={() => setDays(n)}>{n} days</button>)}
+        {[['today', 'Today'], ['yest', 'Yesterday'], ['week', 'This week']].map(([k, l]) => <button key={k} className={'qc' + (days === k ? ' on' : '')} onClick={() => setDays(k)}>{l}</button>)}
         <button className={'qc' + (creditOnly ? ' on' : '')} onClick={() => setCreditOnly(!creditOnly)}>Credit only</button>
       </div>
+      <button className="ghost sm" style={{ marginBottom: 8 }} onClick={clearOld}>Mark all bills before today as delivered</button>
       {!rows && <p className="muted small">Loading...</p>}
       {rows && !list.length && <div className="empty"><b>Every bill is tagged or marked "no delivery needed"</b></div>}
       {list.length > 0 && <p className="muted small">{list.length} bills{DESK_MODE ? '' : ', ' + rs(list.reduce((s, r) => s + Number(r.net || 0), 0))}. Bills appear here after the sync brings them in.</p>}
