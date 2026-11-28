@@ -47,7 +47,8 @@ export function calc(emp, all, ym) {
   let salary = full
   if (emp.leave_date) { const lm = ymOf(emp.leave_date); if (ym > lm) salary = 0; else if (ym === lm) salary = Math.round((full * Number(emp.leave_date.slice(8, 10))) / days) }
   const unpaid = emp.no_attendance ? 0 : cnt(m, 'absent') + 0.5 * cnt(m, 'half')
-  const cut = salary > 0 ? Math.round((full / days) * unpaid) : 0
+  // Absent and half days are only COUNTED. Salary is never reduced automatically: the owner decides and, if needed, records a deduction himself.
+  const cut = 0
   const overtime = sum(m, 'overtime')
   const net = salary - cut + sum(m, 'bonus') + overtime - sum(m, 'deduction')
   const adv = advanceState(emp, mine, ym)

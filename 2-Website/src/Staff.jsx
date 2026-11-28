@@ -10,7 +10,7 @@ import AttCalendar, { setAttendance } from './AttCalendar'
 
 // Staff: attendance exceptions, advances, salary. Saved only in this app's own tables, not connected to Profit Maker.
 const KINDS = [
-  ['absent', 'Absent (unpaid)', 'day'], ['half', 'Half day (unpaid)', 'day'], ['paidleave', 'Paid leave', 'day'],
+  ['absent', 'Absent', 'day'], ['half', 'Half day', 'day'], ['paidleave', 'Paid leave', 'day'],
   ['advance', 'Advance given', 'money'], ['recovery', 'Advance cut from salary', 'money'], ['salary', 'Salary paid', 'money'],
   ['bonus', 'Bonus / incentive', 'money'], ['overtime', 'Overtime', 'money'], ['deduction', 'Other deduction', 'money'],
 ]
@@ -72,7 +72,7 @@ function Detail({ emp, all, ym, setYm, reload, back, edit }) {
   const del = async (e) => { if (await askConfirm('Delete this entry?')) { await supabase.from('emp_entries').delete().eq('id', e.id); reload() } }
 
   const slipRows = () => [
-    ['Basic salary (' + c.days + ' days)', c.salary], ['Unpaid leave: ' + c.unpaid + ' day(s)', -c.cut], ['Bonus / incentive', c.bonus], ['Overtime', c.overtime], ['Other deductions', -c.other],
+    ['Basic salary (' + c.days + ' days)', c.salary], ['Absent / half days: ' + c.unpaid + ' day(s) (no cut)', 0], ['Bonus / incentive', c.bonus], ['Overtime', c.overtime], ['Other deductions', -c.other],
     ['Net salary', c.net], ['Advance cut from salary' + (c.autoCut ? ' (automatic)' : ''), -c.recovered], ['Salary paid', -c.paid], ['Balance to pay', c.balance], ['Advance still to recover', c.advance],
   ]
   const slip = () => exportPdf({ title: 'Salary slip: ' + emp.name + ' | ' + ymName(ym), subtitle: SHOP + (emp.role ? ' | ' + emp.role : ''), filename: 'salary-' + emp.name.replace(/\W+/g, '-').toLowerCase() + '-' + ym,
@@ -95,7 +95,7 @@ function Detail({ emp, all, ym, setYm, reload, back, edit }) {
         <div className="muted small" style={{ marginTop: 4 }}>Advance still to recover: <b>{rs(c.advance)}</b>{c.paidLeave ? ' | paid leaves this month: ' + c.paidLeave : ''}</div>
         {lb.quota > 0 && <div className="muted small">Paid leaves this year: used {lb.used} of {lb.quota}, {Math.max(0, lb.left)} left</div>}
 
-        <div className="muted small">Unpaid days cut at salary / {c.days} days per day.</div>
+        <div className="muted small">Absent and half days are not cut from salary. Add a deduction yourself if you want to cut something.</div>
       </div>
       {!emp.no_attendance && (
         <>

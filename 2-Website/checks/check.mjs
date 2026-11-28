@@ -10,11 +10,12 @@ const e = (kind, d, amount) => ({ emp_id: 1, kind, d, amount })
 eq('days in Feb 2028 (leap year)', daysIn(202802), 29)
 eq('month after December', nextYm(202612), 202701)
 
-// Salary with one absence and one half day in a 30-day month: 30000/30 = 1000 a day, cut 1500
+// One absence and one half day in a 30-day month: counted (1.5 days) but NEVER cut from salary
 let c = calc(emp({}), [e('absent', '2026-11-03'), e('half', '2026-11-10')], 202611)
-eq('absence and half day cut', c.cut, 1500)
-eq('net salary after cut', c.net, 28500)
-eq('nothing paid yet = full balance', c.balance, 28500)
+eq('absence and half day counted', c.unpaid, 1.5)
+eq('absence and half day: no cut', c.cut, 0)
+eq('net salary stays full', c.net, 30000)
+eq('nothing paid yet = full balance', c.balance, 30000)
 
 // Staff with attendance switched off never lose pay
 c = calc(emp({ no_attendance: true }), [e('absent', '2026-11-03')], 202611)
