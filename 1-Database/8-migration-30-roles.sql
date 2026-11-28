@@ -59,7 +59,7 @@ drop policy if exists "fund desk read" on shop_fund;
 create policy "fund desk read" on shop_fund for select to authenticated using (is_desk());
 drop policy if exists "act desk read" on activity_log;
 create policy "act desk read" on activity_log for select to authenticated using (
-  is_desk() and (tbl in ('expenses','shop_fund','bill_tags','counts','fund_requests')
+  is_desk() and (tbl in ('expenses','shop_fund','bill_tags','counts','fund_requests','att_punches')
                  or (tbl = 'emp_entries' and coalesce(new_data->>'kind', old_data->>'kind') in ('absent','half','paidleave'))));
 
 -- Accountant: receivables only. Four limited views; nothing else is opened.

@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 import { SHOP, GSTIN, fetchAll } from './util'
 import { inWords } from './exporter'
 
-// Bill copy laid out like Profit Maker's GST INVOICE, built from synced data (sales_lines + bill_heads). Read only.
+// Bill copy laid out like the shop's own landscape GST INVOICE (shop | invoice | customer, item table, tax box, totals), built from synced data (sales_lines + bill_heads). Read only.
 // Shop details printed at the top and bottom. Change here, or set these in Vercel (VITE_...) to override.
 const E = import.meta.env
 export const SHOP_INFO = {
@@ -12,6 +12,7 @@ export const SHOP_INFO = {
   dl: (E.VITE_SHOP_DL || '').split('|'),
   bank: E.VITE_SHOP_BANK || '',
   juris: E.VITE_SHOP_JURIS || '',
+  fssai: E.VITE_SHOP_FSSAI || '',
   note: 'section 18 of the drugs & cosmetics act 1940.',
 }
 const COLS = 'id,fy,d,bill_no,party,party_code,city,product,pack,batch,qty,free,rate,dis,gst,amount,hsn,mrp,exp,mfg'
@@ -79,71 +80,108 @@ const slabsOf = (g, hd) => {
 export async function billBlob(g, hd) {
   const { jsPDF } = await import('jspdf')
   const autoTable = (await import('jspdf-autotable')).default
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), L = 28, R = W - 28
+  // Landscape A4 laid out like the shop's own GST INVOICE: shop | invoice | customer on top, ruled item table, tax box and totals below.
+  const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' })
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight()
+  const L = 20, R = W - 20, T = 20, B = H - 20
   const t = totals(g.lines), sl = slabsOf(g, hd)
   const sub = hd ? n2(hd.sub_total) : t.taxable
   const gstAmt = hd ? n2(hd.sum_gst) : t.gst
   const net = hd ? n2(hd.net) : Math.round(t.total)
   const inter = !!(hd && hd.inter)
-  const F = (s, z = 9) => { doc.setFont('courier', s); doc.setFontSize(z) }
-  const hr = (y) => { doc.setDrawColor(60); doc.setLineWidth(0.6); doc.line(L, y, R, y) }
-
-  F('bold', 13); doc.text('GST INVOICE', W / 2, 34, { align: 'center' })
-  F('bold', 14); doc.text(SHOP, W / 2, 52, { align: 'center' })
-  F('normal', 9)
-  doc.text(SHOP_INFO.addr1, L, 70); doc.text(SHOP_INFO.addr2, L, 82); doc.text(SHOP_INFO.phone ? 'Ph : ' + SHOP_INFO.phone : '', L, 94)
-  doc.text('Gst No: ' + GSTIN, R, 70, { align: 'right' })
-  SHOP_INFO.dl.filter(Boolean).forEach((x, i) => doc.text((i === 0 ? 'DL Nos: ' : '      : ') + x, R, 82 + i * 12, { align: 'right' }))
-  hr(104)
   const p = hd || {}
-  F('bold', 10); doc.text('To :' + (g.party || ''), L, 120)
-  F('normal', 9)
-  const addr = [p.add1, p.add2, p.add3, p.add4].filter(Boolean)
-  let y = 133
-  addr.forEach((a) => { doc.text(a, L + 20, y); y += 12 })
-  doc.text([p.city, p.pin].filter(Boolean).join('  ') + (p.phone ? '   Ph: ' + p.phone : ''), L + 20, y)
-  const yEnd = y
-  if (p.gstin) doc.text('GSTIN : ' + p.gstin, 300, 133)
-  const dls = [p.dl1, p.dl2].filter(Boolean)
-  dls.forEach((x, i) => doc.text((i === 0 ? 'DL No : ' : '      : ') + x, 300, 157 + i * 12))
-  doc.text('InvNo : ' + g.bill_no, R, 133, { align: 'right' })
-  doc.text('InvDate : ' + dm(g.d), R, 145, { align: 'right' })
-  doc.text('Type : ' + ((hd && hd.typ) || ''), R, 157, { align: 'right' })
-  hr(Math.max(yEnd, 170) + 10)
+  const F = (s, z = 8.5) => { doc.setFont('times', s); doc.setFontSize(z) }
+  const line = (x1, y1, x2, y2, w = 0.6) => { doc.setDrawColor(40); doc.setLineWidth(w); doc.line(x1, y1, x2, y2) }
+  const wrap = (txt, w) => doc.splitTextToSize(String(txt), w)
+  const footerTop = B - 158
+  const headBottom = 124
+  const X1 = 335, X2 = 585   // column dividers of the header block
 
-  const body = g.lines.map((l) => [l.mfg || '', l.hsn || '0', l.product, l.pack || '', l.batch || '', l.exp || '', n2(l.qty).toFixed(1), n2(l.free).toFixed(1), mny(l.rate), mny(l.amount), l.mrp != null ? mny(l.mrp) : '', String(Number(l.gst) || 0), n2(l.dis).toFixed(1)])
+  // ----- header: shop | invoice | customer -----
+  line(L, headBottom, R, headBottom)
+  line(X1, T, X1, headBottom); line(X2, T, X2, headBottom)
+  F('bold', 13); doc.text(wrap(SHOP.toUpperCase(), X1 - L - 12), L + 6, T + 16)
+  F('normal', 8.5)
+  let y = T + 30
+  ;[SHOP_INFO.addr1, SHOP_INFO.addr2, SHOP_INFO.phone ? 'Phone:' + SHOP_INFO.phone : '', SHOP_INFO.dl.filter(Boolean).length ? 'D.L.Nos :' + SHOP_INFO.dl.filter(Boolean).join(',') : '', 'GSTIN NO:' + GSTIN + (SHOP_INFO.fssai ? '   FSSAI:' + SHOP_INFO.fssai : '')]
+    .filter(Boolean).forEach((s) => { wrap(s, X1 - L - 12).forEach((w) => { doc.text(w, L + 6, y); y += 11 }) })
+
+  F('bold', 14); doc.text('GST INVOICE', (X1 + X2) / 2, T + 18, { align: 'center' })
+  F('bold', 10); doc.text('Inv No:' + g.bill_no + '   Date:' + dm(g.d), (X1 + X2) / 2, T + 38, { align: 'center' })
+  F('normal', 8.5)
+  doc.text('Ord No:', X1 + 8, T + 56); doc.text('Date :', X1 + 135, T + 56)
+  doc.text('Lr No :', X1 + 8, T + 68); doc.text('Date :', X1 + 135, T + 68)
+  doc.text('Type', X2 - 8, T + 56, { align: 'right' }); F('bold', 9); doc.text((hd && hd.typ) || '', X2 - 8, T + 68, { align: 'right' })
+
+  F('bold', 10); doc.text(wrap('To:' + (g.party || ''), R - X2 - 20), X2 + 6, T + 16)
+  F('normal', 8.5)
+  y = T + 30
+  const dls = [p.dl1, p.dl2].filter(Boolean)
+  ;[...[p.add1, p.add2, p.add3, p.add4].filter(Boolean), [p.city, p.pin].filter(Boolean).join(' - '), dls.length ? 'D.L.Nos :' + dls.join(',') : '', p.gstin ? 'GSTIN NO:' + p.gstin : '', p.phone ? 'Phone:' + p.phone : '']
+    .filter(Boolean).forEach((s) => { wrap(s, R - X2 - 20).forEach((w) => { if (y < headBottom - 3) { doc.text(w, X2 + 6, y); y += 10.5 } }) })
+
+  // ----- item table -----
+  const heads = ['S.NO', 'PRODUCT NAME', 'PACK', 'HSNCODE', 'MFG', 'BATCHNO', 'EXPIRY', 'QTY', 'FREE', 'RATE', 'DIS%', 'M.R.P', ...(inter ? ['IGST%'] : ['CGST%', 'SGST%']), 'AMOUNT']
+  const wd = [24, 0, 34, 54, 40, 66, 44, 34, 30, 52, 34, 52, ...(inter ? [40] : [36, 36]), 62]
+  wd[1] = (R - L) - wd.reduce((s, v) => s + v, 0)
+  const body = g.lines.map((l, i) => {
+    const gs = Number(l.gst) || 0
+    return [String(i + 1), l.product, l.pack || '', l.hsn || '', l.mfg || '', l.batch || '', l.exp || '', n2(l.qty).toFixed(1), n2(l.free).toFixed(1), mny(l.rate), mny(l.dis), l.mrp != null ? mny(l.mrp) : '', ...(inter ? [String(gs)] : [String(gs / 2), String(gs / 2)]), mny(l.amount)]
+  })
+  const colStyles = {}
+  wd.forEach((w, i) => { colStyles[i] = { cellWidth: w, halign: i >= 7 ? 'right' : i === 0 ? 'center' : 'left' } })
+  const xs = []; wd.reduce((a, w) => { a += w; xs.push(L + a); return a }, 0)
+  const frame = (pg) => {
+    doc.setDrawColor(40); doc.setLineWidth(0.8); doc.rect(L, T, R - L, B - T)
+    const top = pg === 1 ? headBottom : T + 4
+    xs.slice(0, -1).forEach((x) => line(x, top, x, footerTop, 0.4))
+  }
   autoTable(doc, {
-    startY: Math.max(yEnd, 170) + 14, theme: 'plain',
-    head: [['MFG', 'Hsn', 'Product Name', 'Pack', 'Batch', 'Exp', 'Qty', 'Free', 'Rate', 'Amount', 'M.R.P', 'Gst', 'Dis']], body,
-    styles: { font: 'courier', fontSize: 7.5, cellPadding: { top: 2, bottom: 2, left: 2, right: 2 }, overflow: 'linebreak' },
-    headStyles: { fontStyle: 'bold', lineWidth: { top: 0.6, bottom: 0.6 }, lineColor: [60, 60, 60] },
-    margin: { left: L, right: 28, bottom: 230 },
-    columnStyles: { 0: { cellWidth: 26 }, 1: { cellWidth: 44 }, 2: { cellWidth: 100 }, 3: { cellWidth: 30 }, 4: { cellWidth: 62 }, 5: { cellWidth: 30 }, 6: { halign: 'right', cellWidth: 26 }, 7: { halign: 'right', cellWidth: 26 }, 8: { halign: 'right', cellWidth: 42 }, 9: { halign: 'right', cellWidth: 46 }, 10: { halign: 'right', cellWidth: 42 }, 11: { halign: 'right', cellWidth: 18 }, 12: { halign: 'right', cellWidth: 22 } },
-    didParseCell: (d) => { if (d.section === 'head' && d.column.index >= 6) d.cell.styles.halign = 'right' },
+    startY: headBottom, theme: 'plain', head: [heads], body,
+    styles: { font: 'times', fontSize: 8.5, cellPadding: { top: 3, bottom: 3, left: 3, right: 3 }, overflow: 'linebreak', textColor: 20 },
+    headStyles: { fontStyle: 'bold', lineWidth: { bottom: 0.6 }, lineColor: [40, 40, 40] },
+    columnStyles: colStyles, margin: { left: L, right: L, top: T + 4, bottom: B - footerTop + 4 },
+    didParseCell: (d) => { if (d.section === 'head') d.cell.styles.halign = d.column.index >= 7 ? 'right' : d.column.index === 0 ? 'center' : 'left' },
+    didDrawPage: (d) => frame(d.pageNumber),
   })
-  let by = doc.lastAutoTable.finalY + 14
-  if (by > H - 215) { doc.addPage(); by = 40 }
+
+  // ----- footer on the last page: tax box, totals, terms -----
+  line(L, footerTop, R, footerTop)
+  const gx = [L + 6, L + 56, L + 130, L + 200, L + 270]
+  F('bold', 8.5)
+  ;['GST%', 'TAXABLE', 'CGSTAMT', 'SGSTAMT', 'IGSTAMT'].forEach((h, i) => (i ? doc.text(h, gx[i] + (i === 1 ? 50 : 48), footerTop + 13, { align: 'right' }) : doc.text(h, gx[i], footerTop + 13)))
+  doc.text('NOTE:Have a nice day...', L + 330, footerTop + 13)
+  line(L, footerTop + 18, L + 320, footerTop + 18, 0.4)
   F('normal', 8.5)
-  doc.text(SHOP_INFO.bank ? 'Bank Details : ' + SHOP_INFO.bank : '', L + 6, by, { maxWidth: R - L - 12 }); by += 18
-  hr(by - 6)
-  F('bold', 8.5); doc.text('TAXABLE VALUES', L, by + 8); doc.text(inter ? 'IGST AMT' : 'CGST AMT', 190, by + 8); if (!inter) doc.text('SGST AMT', 255, by + 8)
-  F('normal', 8.5)
+  let tv = 0, tc = 0, ts = 0, ti = 0
   sl.filter((s) => s.r > 0).forEach((s, i) => {
-    const yy = by + 22 + i * 13
-    doc.text(s.r + '%: ' + mny(s.v), L, yy)
-    if (inter) doc.text(mny(s.x), 190, yy); else { doc.text(mny(s.x / 2), 190, yy); doc.text(mny(s.x / 2), 255, yy) }
+    const yy = footerTop + 30 + i * 12
+    const c = inter ? 0 : s.x / 2, ig = inter ? s.x : 0
+    tv += s.v; tc += c; ts += c; ti += ig
+    doc.text(s.r.toFixed(2) + '%:', gx[0], yy); doc.text(mny(s.v), gx[1] + 50, yy, { align: 'right' }); doc.text(mny(c), gx[2] + 48, yy, { align: 'right' }); doc.text(mny(c), gx[3] + 48, yy, { align: 'right' }); doc.text(mny(ig), gx[4] + 48, yy, { align: 'right' })
   })
-  const rx = 330, vx = R
-  const right = [['0% Gst Val :', mny(sl[0].v)], ['No.of Items: ' + g.lines.length, 'SubTotal: ' + mny(sub)], ['No.of Units: ' + t.qty, 'Less Disc: ' + mny(hd ? hd.less_disc : 0)], ['(-/+)Adjust: ' + mny(hd ? hd.adjust : 0), 'Gst Amt: ' + mny(gstAmt)], ['Cr.Note Amt: ' + mny(hd ? hd.cr_note : 0), 'Rounding: ' + mny(hd ? hd.rounding : n2(net - t.total))]]
-  right.forEach(([a, b], i) => { const yy = by + 8 + i * 13; if (i === 0) { doc.text(a, 400, yy); doc.text(b, vx, yy, { align: 'right' }) } else { doc.text(a, rx, yy); doc.text(b, vx, yy, { align: 'right' }) } })
-  const ny = by + 22 + 5 * 13 + 4
-  hr(ny)
-  F('normal', 9); doc.text(inWords(net).replace(/ Rupees Only$/, ' Rupees Only').replace(/^Zero$/, 'Zero'), L, ny + 16, { maxWidth: 300 })
-  F('bold', 11); doc.text('NET PAYABLE: ' + mny(net), R, ny + 34, { align: 'right' })
-  hr(ny + 44)
-  F('normal', 8); doc.text(SHOP_INFO.note, L, ny + 60)
-  doc.text('E.&O.E          Subject To ' + SHOP_INFO.juris + '     Jurisdiction', L, ny + 82); doc.text('For ' + SHOP, R, ny + 82, { align: 'right' })
+  line(L, footerTop + 76, L + 320, footerTop + 76, 0.4)
+  F('bold', 8.5)
+  doc.text('Total :', gx[0], footerTop + 88); doc.text(mny(tv), gx[1] + 50, footerTop + 88, { align: 'right' }); doc.text(mny(tc), gx[2] + 48, footerTop + 88, { align: 'right' }); doc.text(mny(ts), gx[3] + 48, footerTop + 88, { align: 'right' }); doc.text(mny(ti), gx[4] + 48, footerTop + 88, { align: 'right' })
+
+  F('normal', 8.5)
+  const ax = 520, av = 665, bx = 690
+  ;[['0% Taxabale :', mny(sl[0].v), 'Subtotal :', mny(sub)], ['Adjust (-/+) :', mny(hd ? hd.adjust : 0), 'Less Disc :', mny(hd ? hd.less_disc : 0)], ['Cr/Dr Amt :', mny(hd ? hd.cr_note : 0), 'Gst Amt :', mny(gstAmt)], ['Freight Amt :', '0.00', 'Rounding :', mny(hd ? hd.rounding : n2(net - t.total))]]
+    .forEach(([a, av2, b, bv], i) => { const yy = footerTop + 13 + i * 12; doc.text(a, ax, yy); doc.text(av2, av, yy, { align: 'right' }); doc.text(b, bx, yy); doc.text(bv, R - 6, yy, { align: 'right' }) })
+  doc.text('Total Products :', ax, footerTop + 64); doc.text(String(g.lines.length), av, footerTop + 64, { align: 'right' })
+  doc.text('Total Qty :', ax, footerTop + 76); doc.text(n2(t.qty).toFixed(2), av, footerTop + 76, { align: 'right' })
+  line(L + 330, footerTop + 94, R, footerTop + 94, 0.4)
+  F('normal', 8.5); doc.text(wrap('Tcs%: 0 Tcs Amt: 0   AmtInWords : ' + inWords(net), 420), L + 330, footerTop + 106)
+  F('bold', 9); doc.text('NET AMOUNT', R - 120, footerTop + 124, { align: 'right' }); F('bold', 15); doc.text(mny(net), R - 6, footerTop + 126, { align: 'right' })
+  line(L, footerTop + 94, L + 320, footerTop + 94, 0.4)
+  F('bold', 8); doc.text('Terms:', L + 6, footerTop + 106)
+  F('normal', 7.5)
+  const terms = ['1.Goods Once Sold Cannot taken Back.The goods supplied in this invoice do not contravene ' + SHOP_INFO.note, '2.Subject to ' + (SHOP_INFO.juris || '') + ' Jurisdiction Only. E.&O.E']
+  let ty = footerTop + 116
+  terms.forEach((s) => wrap(s, 310).forEach((w) => { doc.text(w, L + 6, ty); ty += 9 }))
+  if (SHOP_INFO.bank) wrap(SHOP_INFO.bank, 310).forEach((w) => { doc.text(w, L + 6, ty); ty += 9 })
+  F('bold', 8.5); doc.text(SHOP.toUpperCase(), R - 6, footerTop + 142, { align: 'right' })
+  F('normal', 8); doc.text('Authorised Signatory', R - 6, footerTop + 153, { align: 'right' })
   return { blob: doc.output('blob'), filename: ('Bill-' + g.bill_no + '-' + g.d).replace(/[^\w-]+/g, '-') + '.pdf', net }
 }
 

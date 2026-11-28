@@ -13,6 +13,7 @@ import { BUILD } from './version'
 import ChangePassword from './ChangePassword'
 import { pushSupported, pushOn, enablePush } from './push'
 import Attendance from './Attendance'
+import { Punch } from './PunchClock'
 import TempBill from './TempBill'
 import Inbox from './Inbox'
 import Expenses from './Expenses'
@@ -110,6 +111,7 @@ const ACCT_TILES = [['acct', 'Receivables', 'Who owes us, share PDF', '#b45309',
 
 // Each tile has its own colour and a big picture, so it can be recognised without reading
 const TILES = [
+  ['punch', 'Punch in / out', 'Arrival and leaving time', '#059669', '\u23F0'],
   ['exp', 'Add expense', 'Spend from the shop fund', '#16a34a', '\u{1F4B8}'],
   ['tasks', 'Today\'s tasks', '', '#2563eb', '\u2705'],
   ['tag', 'My deliveries', 'Bills sent with you, or tag one', '#ea580c', '\u{1F69A}'],
@@ -196,7 +198,7 @@ export default function StaffApp({ session, empId, desk, acct, stockScreen }) {
             <span>Shop fund balance</span><b style={{ fontSize: 22, color: balance != null && balance < 0 ? 'var(--bad)' : undefined }}>{balance == null ? '...' : rs(balance)}</b>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {[...(desk ? DESK_TILES : []), ...(acct ? ACCT_TILES : []), ...TILES].map(([k, l, s, c, ic]) => (
+            {[...(desk ? DESK_TILES : []), ...(acct ? ACCT_TILES : []), ...TILES].filter((x) => !(x[0] === 'punch' && emp.no_attendance)).map(([k, l, s, c, ic]) => (
               <button key={k} className="chartcard" style={{ textAlign: 'left', border: 0, display: 'grid', gap: 4, minHeight: 104, background: c, color: '#fff', alignContent: 'start' }} onClick={() => setTab(k)}>
                 <span style={{ fontSize: 34, lineHeight: 1 }}>{ic}</span>
                 <b style={{ fontSize: 16 }}>{l}{badge[k] > 0 ? <span style={{ background: '#fff', color: c, borderRadius: 10, padding: '0 7px', marginLeft: 6, fontSize: 13 }}>{badge[k]}</span> : ''}</b>
@@ -222,6 +224,7 @@ export default function StaffApp({ session, empId, desk, acct, stockScreen }) {
           {tab === 'ret' && <ReturnNote emp={emp} />}
           {tab === 'count' && <CountSheets onChange={load} />}
           {tab === 'req' && <RequestMoney emp={emp} balance={balance} />}
+          {tab === 'punch' && <Punch empId={empId} />}
           {tab === 'att' && <MyAttendance emp={emp} entries={ents} />}
         </>)}
     </div>

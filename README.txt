@@ -1,5 +1,5 @@
 =====================================================================
- SKMA SHOP APP KIT  -  Build 41  (25 Nov 2026)
+ SKMA SHOP APP KIT  -  Build 43  (28 Nov 2026)
  DETAILED STEP-BY-STEP README
 =====================================================================
  A phone app for stock, parties, dues, bills, staff, expenses and reports,
@@ -41,9 +41,11 @@
     8-migration-30-roles.sql  Desk login and Accountant login
     9-migration-31-cash-slips.sql  Desk cash slips (owner approves) and the Desk's safe stock view
     10-migration-32-deliveries.sql  Desk sends bills out with an employee; employees see their bills
+    11-grants-new-projects.sql  Table permissions that new Supabase projects need
+    12-migration-33-attendance-times.sql  Arrival and leaving times (Punch in / out), with its own permissions (RUN LAST)
     optional\push-triggers.sql, weekly-push.sql   Push notifications (optional)
     RUN THE NUMBERED FILES ONE AT A TIME, IN ORDER, ONCE EACH.
-    (Tested on a clean database: all 10 files run with no errors, in this order.)
+    (Tested on a clean database: all 12 files run with no errors, in this order.)
 
  2-Website\                 The phone app. Goes to GitHub, then Vercel.
  3-Shop-PC\ShopSync\        Scripts for the shop computer (copy to C:\ShopSync)
@@ -85,7 +87,8 @@
         1-setup-new-shop.sql, 2-migration-23.sql, 3-migration-24.sql,
         4-migration-25.sql, 5-migration-26.sql, 6-migration-27.sql,
         7-migration-28.sql, 8-migration-30-roles.sql, 9-migration-31-cash-slips.sql,
-        10-migration-32-deliveries.sql
+        10-migration-32-deliveries.sql, 11-grants-new-projects.sql,
+        12-migration-33-attendance-times.sql
      open it with Notepad > Ctrl+A > Ctrl+C > click the Supabase box > Ctrl+V > Run.
      YOU SHOULD SEE "Success. No rows returned" every time.
      (A yellow warning about "destructive operations"/"row level security": click Run this query.)
@@ -125,6 +128,7 @@
         VITE_SHOP_PHONE          shop phone
         VITE_SHOP_DL             licences separated by |   e.g. 20B:TS/123|21B:TS/124
         VITE_SHOP_BANK           bank details line (optional)
+        VITE_SHOP_FSSAI          FSSAI number (optional, printed under the GSTIN on bill copies)
         VITE_SHOP_JURIS          town for "Subject to ... jurisdiction"
      Click Deploy. Wait 1-2 minutes.  YOU SHOULD SEE confetti / "Congratulations".
      (Changed a setting later? Deployments > ... > Redeploy.)
@@ -189,6 +193,13 @@
  [ ] E6 DESK login: tiles Mark attendance, Deliveries, Reports returns tasks, Shop expenses,
                Activity log + the employee tiles. Shop expenses shows everyone's spending
                and has NO "+ Add" button. Mark attendance lists everyone, no salaries.
+ [ ] E6p PUNCH CLOCK (Build 42). OWNER: Staff > Attendance > Settings. Set the opening time (e.g. 09:30),
+               grace (10), half-day hours (4). Stand INSIDE the shop, tap "Set the shop location (use this
+               phone now)" and allow Location. EMPLOYEE login (at the shop): tile "Punch in / out" > "I'm in" >
+               allow Location > it says "You are in at ...". Wait 3 minutes > "I'm leaving". The same screen shows
+               the month. Go home / far away and try "I'm in" on another day: it says "You are about N m from the
+               shop". OWNER or DESK: Attendance shows In / Out / hours under each name, "Edit times" fixes a time
+               (the original stays in the activity log), "Monthly times" gives the month with PDF / Excel.
  [ ] E6b DESK cash slip: Desk > Cash slip > type a customer name, add a product (pick a batch), Save.
                It says it went to the owner. In "My slips" it shows "Waiting for owner approval" and
                has NO PDF / WhatsApp button. Log in as an owner > Temporary bill > To approve: the slip
@@ -230,6 +241,9 @@
  Stock count sheets (counting)       -        yes      yes     yes
  Suggestions / return notes          -        yes      yes     yes
  Mark attendance for everyone        yes      no       YES     no
+ Punch in / out (own times)          -        yes      yes     yes
+ Fix anyone's arrival / leaving time yes      no       YES     no
+ Attendance settings, shop location  yes      no       no      no
  Send bills out with an employee    yes      no       YES (no amounts)  no
  Reply to reports / return notes     yes      no       YES     no
  Set tasks for staff                 yes      no       YES     no
@@ -282,7 +296,7 @@
  UPDATING THE WEBSITE: GitHub > src > Add file > Upload files > commit. Vercel updates in about
    a minute. Close and reopen the app on phones.
  GOING BACK to an older website: Vercel > Deployments > the earlier one > Promote to Production.
- EMERGENCY RESTORE: new Supabase project; run SQL files 1 to 10 again (owners first, as in
+ EMERGENCY RESTORE: new Supabase project; run SQL files 1 to 11 again (owners first, as in
    A3); create logins; put the new keys in Vercel (Redeploy) and in sync-config.json; then
    restore-golden.bat (drag the zip in, type YES); then run-sync.bat.
  PUSH ALERTS FOR CASH SLIPS AND DELIVERIES: only if you already set up push (folder 4-Push-Notifications): paste the new
@@ -295,6 +309,17 @@
 ---------------------------------------------------------------------
  Invalid login credentials     Wrong email/password, or Auto Confirm was not ticked: delete the
                                user in Supabase and create it again with Auto Confirm ticked.
+ "You are about N m from the shop"  The employee is too far, or the shop location was saved from the wrong place:
+   Owner > Staff > Attendance > Settings > stand inside the shop > "Set the shop location again". Raise the distance to
+   200 if the building is big. "Remove location check" switches the distance rule off.
+ Punch says location is blocked  Phone Settings > Apps > (Chrome or the app) > Permissions > Location > Allow.
+ Forgot to punch out  Shown in orange on Attendance for 14 days. Desk or owner: tap it > Edit times > enter the time.
+   Nothing is guessed. A day under the half-day hours is marked half day automatically (note "auto: short hours");
+   fixing the times so the day is long enough removes that half day again.
+ Honest limit: a phone app that fakes GPS can fool the distance check; it stops casual cheating only. The distance
+   and accuracy of every punch are saved, and every fix is in the activity log.
+ "permission denied for table ..."  (a red line in the app, or in the sync window) Run 11-grants-new-projects.sql in the
+   SQL Editor (it is safe to run again), then close and reopen the app. New Supabase projects need it.
  Login works but the app is    The login has no role. Owner: run the app_roles line in A6.
    empty / "nothing to see"    Employee: link it in Staff (D2).
  Employee sees the OWNER       The login was created before the SQL files ran. In Supabase run:
@@ -325,8 +350,10 @@
      backup_folder  where the kit saves backup zips, e.g. "D:\\ShopBackups"
      live_mdb       optional; if set, the app update reads that file directly. Normally empty.
    After editing: save, run run-backup.bat then run-sync.bat; the last line should say OK.
-   If Profit Maker already makes its own backup zips, you may point backup_folder there (zips must
-   be named like Data####_....zip) but keep data_file set.
+   Keep backup_folder SEPARATE from Profit Maker's own backup folder (the default ShopBackups is). The kit's backups
+   are named Data####_<date>_<time>_auto.zip and the automatic clean-up deletes only files named like that, so it can
+   never remove Profit Maker's own backups. Profit Maker's own warning about "no backup" only counts backups made
+   from its own Backup menu: make one now and then from there too.
  ASKING FOR HELP: photo of the black window + sync.log and auto-backup.log from C:\ShopSync.
    NEVER send the Secret key.
 

@@ -7,11 +7,11 @@ import { showMsg } from './dialog'
 // Owner-only history of who changed what. Written by database triggers, so it cannot be skipped or edited from the app.
 const TBL = {
   shop_fund: 'Shop fund', expenses: 'Expenses', emp_entries: 'Staff entries', employees: 'Employees',
-  app_roles: 'Logins', fund_requests: 'Fund requests', bill_tags: 'Delivery tags', counts: 'Stock counts',
+  app_roles: 'Logins', fund_requests: 'Fund requests', bill_tags: 'Delivery tags', counts: 'Stock counts', att_punches: 'Arrival / leaving times',
 }
 const ACT = { INSERT: 'added', UPDATE: 'changed', DELETE: 'deleted' }
-const FIELD = { amount: 'amount', category: 'category', note: 'note', d: 'date', salary: 'salary', name: 'name', role: 'role', status: 'status', kind: 'type', adv_cut: 'advance cut', leave_date: 'last day', leave_quota: 'leave quota', active: 'active', email: 'login email', bill_no: 'bill' }
-const val = (k, v) => (v == null || v === '' ? 'empty' : ['amount', 'salary', 'adv_cut'].includes(k) ? rs(Number(v)) : String(v))
+const FIELD = { amount: 'amount', category: 'category', note: 'note', d: 'date', salary: 'salary', name: 'name', role: 'role', status: 'status', kind: 'type', adv_cut: 'advance cut', leave_date: 'last day', leave_quota: 'leave quota', active: 'active', email: 'login email', bill_no: 'bill', t_in: 'came in', t_out: 'left', fixed_by: 'fixed by' }
+const val = (k, v) => (['t_in', 't_out', 'orig_in', 'orig_out'].includes(k) && v ? new Date(v).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : v == null || v === '' ? 'empty' : ['amount', 'salary', 'adv_cut'].includes(k) ? rs(Number(v)) : String(v))
 
 function describe(r) {
   const d = r.new_data || r.old_data || {}
@@ -23,7 +23,7 @@ function describe(r) {
   const bits = [d.name, d.category, d.kind, d.email, d.bill_no, d.amount != null ? rs(Number(d.amount)) : null, d.d, d.note].filter((x) => x != null && x !== '')
   return what + ' ' + ACT[r.action] + (bits.length ? ': ' + bits.join(' | ') : '')
 }
-const DESK_TBL = ['shop_fund', 'expenses', 'emp_entries', 'fund_requests', 'bill_tags', 'counts']
+const DESK_TBL = ['shop_fund', 'expenses', 'emp_entries', 'fund_requests', 'bill_tags', 'counts', 'att_punches']
 const stamp = (t) => new Date(t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
 export default function ActivityLog({ desk }) {
