@@ -72,7 +72,7 @@ export default function Attendance({ back, desk }) {
     <div className="app">
       <header className="top"><div><button className="ghost sm" onClick={back}>Back</button><h1 className="h1" style={{ marginTop: 8 }}>Attendance</h1></div></header>
       <div className="btnrow" style={{ margin: '0 0 10px' }}>
-        <button className="ghost sm" onClick={() => setView('month')}>Monthly times</button>
+        <button className="ghost sm" onClick={() => setView('month')}>Month summary</button>
         {!desk && <button className="ghost sm" onClick={() => setView('set')}>Settings</button>}
       </div>
       {openOnes.length > 0 && (
@@ -86,7 +86,14 @@ export default function Attendance({ back, desk }) {
         <input className="fsel" type="date" value={d} onChange={(e) => e.target.value && setD(e.target.value)} style={{ flex: 1 }} />
         <button className="ghost sm" onClick={() => setD(shift(d, 1))} disabled={d >= iso(new Date())}>&rsaquo;</button>
       </div>
-      <p className="muted small" style={{ margin: '0 0 8px' }}>{dm(d)}: everyone is present unless you tap another option.</p>
+      {emps && people.length > 0 && (() => {
+        const withP = people.filter((e) => punchOf(e.id) && punchOf(e.id).t_in)
+        const late = withP.filter((e) => lateBy(punchOf(e.id), cfg) > 0).length
+        const away = people.filter((e) => ['absent', 'paidleave'].includes(kindOf(e.id))).length
+        const notIn = people.filter((e) => !(punchOf(e.id) && punchOf(e.id).t_in) && !['absent', 'paidleave'].includes(kindOf(e.id))).length
+        return <div className="minis" style={{ marginBottom: 8 }}><div className="mini"><span>Punched in</span><b>{withP.length}</b></div><div className="mini"><span>{d === todayIST() ? 'Not in yet' : 'No punch'}</span><b style={{ color: notIn ? '#ea580c' : undefined }}>{notIn}</b></div><div className="mini"><span>Late</span><b>{late}</b></div><div className="mini"><span>Off</span><b>{away}</b></div></div>
+      })()}
+      <p className="muted small" style={{ margin: '0 0 8px' }}>{dm(d)}: everyone counts as present unless you mark Absent, Half day or Paid leave. Punch times and short days are only shown to help you decide.</p>
       {err && <p className="error pad">{err}</p>}
       {!emps && <p className="muted pad">Loading...</p>}
       {emps && !people.length && !err && <div className="empty"><b>No working employees on this date</b></div>}
@@ -122,7 +129,7 @@ function PunchLine({ p, cfg, d, kind, onEdit }) {
         {p && <>In <b>{hm(p.t_in) || '--'}</b>{late ? <span style={{ color: 'var(--bad)' }}> (late {late}m)</span> : ''} &middot; Out <b>{p.t_out ? hm(p.t_out) : '--'}</b>{hoursOf(p) != null ? ' | ' + hmm(hoursOf(p)) : ''}
           {open && d < todayIST() && <b style={{ color: '#ea580c' }}> forgot to punch out</b>}
           {open && d === todayIST() && <span className="muted"> still in</span>}
-          {p.auto_half && <span style={{ color: 'var(--bad)' }}> | auto half day</span>}
+          {p.auto_half && <b style={{ color: '#ea580c' }}> | short day (you decide about a half day)</b>}
           {p.fixed_at && <span className="muted"> | fixed by {(p.fixed_by || '').split('@')[0]}</span>}</>}
         {p && kind === 'absent' && <b style={{ color: '#ea580c' }}> marked absent but punched in</b>}
       </span>
@@ -130,37 +137,78 @@ function PunchLine({ p, cfg, d, kind, onEdit }) {
     </div>)
 }
 
-// Month summary of arrival and leaving times, per employee
+// Month summary for deciding pay: leaves, half days, short days, late days, missing punches. Only shows numbers; nothing here changes salary.
 function TimesReport({ back, cfg }) {
   const [ym, setYm] = useState(curYm())
   const [rows, setRows] = useState(null)
+  const [ents, setEnts] = useState([])
   const [emps, setEmps] = useState([])
   const sp = span(ym)
   useEffect(() => {
     setRows(null)
-    Promise.all([supabase.from('att_punches').select('*').gte('d', sp.from).lte('d', sp.to), supabase.from('desk_employees').select('id,name,active,no_attendance').order('name')]).then(([a, b]) => {
+    Promise.all([
+      supabase.from('att_punches').select('*').gte('d', sp.from).lte('d', sp.to),
+      supabase.from('desk_employees').select('id,name,active,no_attendance,join_date,leave_date').order('name'),
+      supabase.from('emp_entries').select('emp_id,d,kind').in('kind', ATT).gte('d', sp.from).lte('d', sp.to),
+    ]).then(([a, b, c]) => {
       if (a.error) { showMsg(a.error.message); setRows([]); return }
-      setRows(a.data); setEmps(b.data || [])
+      setRows(a.data); setEmps(b.data || []); setEnts(c.data || [])
     })
   }, [ym])
-  const lines = (emps || []).map((e) => {
+  const today = todayIST()
+  const off = cfg ? cfg.weekly_off : 0
+  const lines = (emps || []).filter((e) => !e.no_attendance).map((e) => {
     const ps = (rows || []).filter((p) => p.emp_id === e.id)
+    const es = ents.filter((x) => x.emp_id === e.id)
+    const dayN = (x) => Number(x.d.slice(8, 10))
     const done = ps.filter((p) => p.t_out)
     const hrs = done.reduce((s, p) => s + hoursOf(p), 0)
-    return { name: e.name, days: ps.length, late: ps.filter((p) => lateBy(p, cfg) > 0).length, half: ps.filter((p) => p.auto_half).length, open: ps.filter((p) => p.t_in && !p.t_out && p.d < todayIST()).length, hrs, avg: done.length ? hrs / done.length : 0 }
-  }).filter((l) => l.days)
-  const build = () => ({ title: 'Attendance times', subtitle: ymName(ym), filename: 'attendance-times-' + ym, columns: ['Name', 'Days punched', 'Late days', 'Auto half days', 'Not punched out', 'Total hours', 'Avg hours/day'], rows: lines.map((l) => [l.name, l.days, l.late, l.half, l.open, l.hrs.toFixed(1), l.avg.toFixed(1)]), numCols: [1, 2, 3, 4, 5, 6] })
+    const absent = es.filter((x) => x.kind === 'absent'), half = es.filter((x) => x.kind === 'half'), pl = es.filter((x) => x.kind === 'paidleave')
+    const shortD = ps.filter((p) => p.auto_half), lateD = ps.filter((p) => lateBy(p, cfg) > 0)
+    const open = ps.filter((p) => p.t_in && !p.t_out && p.d < today)
+    // working days with no punch and nothing marked (weekly off, future days and days outside the joining / leaving dates are skipped)
+    const noPunch = []
+    for (let n = 1; n <= daysIn(ym); n++) {
+      const d = sp.from.slice(0, 8) + String(n).padStart(2, '0')
+      if (d > today || (e.join_date && d < e.join_date) || (e.leave_date && d > e.leave_date)) continue
+      if (off != null && new Date(d + 'T00:00:00').getDay() === Number(off)) continue
+      if (ps.some((p) => p.d === d) || es.some((x) => x.d === d)) continue
+      noPunch.push(n)
+    }
+    return { name: e.name, active: e.active, any: ps.length || es.length, days: ps.length, absent: absent.map(dayN), half: half.map(dayN), pl: pl.map(dayN), short: shortD.map((p) => Number(p.d.slice(8, 10))), late: lateD.map((p) => Number(p.d.slice(8, 10))), open: open.map((p) => Number(p.d.slice(8, 10))), noPunch, hrs, avg: done.length ? hrs / done.length : 0 }
+  }).filter((l) => l.active || l.any)
+  const sum = (a) => a.length
+  const lst = (a) => (a.length ? ' (' + a.join(', ') + ')' : '')
+  const build = () => ({ title: 'Attendance summary', subtitle: ymName(ym) + ' (numbers only, for deciding pay)', filename: 'attendance-summary-' + ym,
+    columns: ['Name', 'Absent', 'Half days', 'Paid leave', 'Short days', 'Late days', 'No punch, not marked', 'Not punched out', 'Days punched', 'Total hours'],
+    rows: lines.map((l) => [l.name, sum(l.absent), sum(l.half), sum(l.pl), sum(l.short), sum(l.late), sum(l.noPunch), sum(l.open), l.days, l.hrs.toFixed(1)]), numCols: [1, 2, 3, 4, 5, 6, 7, 8, 9] })
+  const Mini = ({ k, v, warn }) => <div className="mini"><span>{k}</span><b style={{ color: warn && v ? '#ea580c' : undefined }}>{v}</b></div>
   return (
     <>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}><button className="ghost sm" onClick={back}>Back</button><h2 className="h2" style={{ margin: 0 }}>Monthly times</h2></div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}><button className="ghost sm" onClick={back}>Back</button><h2 className="h2" style={{ margin: 0 }}>Month summary</h2></div>
+      <p className="muted small" style={{ margin: '0 0 8px' }}>Numbers to help you decide before paying. Nothing here changes salary: absent and half days count only when somebody marks them on the Attendance screen.</p>
       <MonthPick ym={ym} onChange={setYm} />
       {!rows && <p className="muted pad">Loading...</p>}
-      {rows && !lines.length && <div className="empty"><b>No punches this month</b></div>}
+      {rows && !lines.length && <div className="empty"><b>No data this month</b></div>}
       {lines.length > 0 && <ExportBar build={build} />}
       {lines.map((l) => (
-        <div key={l.name} className="chartcard" style={{ marginBottom: 6 }}>
+        <div key={l.name} className="chartcard" style={{ marginBottom: 8 }}>
           <b>{l.name}</b>
-          <div className="small muted">{l.days} days punched | late {l.late} | auto half {l.half}{l.open ? ' | ' + l.open + ' not punched out' : ''}<br />{hmm(l.hrs)} total | average {hmm(l.avg)} a day</div>
+          <div className="minis" style={{ marginTop: 6 }}>
+            <Mini k="Absent" v={sum(l.absent)} /><Mini k="Half days" v={sum(l.half)} /><Mini k="Paid leave" v={sum(l.pl)} />
+          </div>
+          <div className="minis" style={{ marginTop: 6 }}>
+            <Mini k="Short days" v={sum(l.short)} warn /><Mini k="Late" v={sum(l.late)} warn /><Mini k="No punch" v={sum(l.noPunch)} warn />
+          </div>
+          <div className="small muted" style={{ marginTop: 6, lineHeight: 1.5 }}>
+            {sum(l.absent) > 0 && <div>Absent days{lst(l.absent)}</div>}
+            {sum(l.half) > 0 && <div>Half days marked{lst(l.half)}</div>}
+            {sum(l.short) > 0 && <div style={{ color: '#ea580c' }}>Short days, not marked as half day{lst(l.short)}</div>}
+            {sum(l.late) > 0 && <div>Late on{lst(l.late)}</div>}
+            {sum(l.noPunch) > 0 && <div>No punch and nothing marked{lst(l.noPunch)}</div>}
+            {sum(l.open) > 0 && <div style={{ color: '#ea580c' }}>Forgot to punch out{lst(l.open)}</div>}
+            {l.days > 0 && <div>{l.days} days punched | {hmm(l.hrs)} worked | average {hmm(l.avg)} a day</div>}
+          </div>
         </div>))}
     </>)
 }

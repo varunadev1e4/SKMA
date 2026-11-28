@@ -58,7 +58,7 @@ export function Punch({ empId }) {
       else {
         setToday(data)
         showMsg(dir === 'in' ? 'You are in at ' + hm(data.t_in) + '.' + (lateBy(data, cfg) ? ' (Late by ' + lateBy(data, cfg) + ' min)' : '')
-          : 'You left at ' + hm(data.t_out) + '. Worked ' + hmm(hoursOf(data)) + '.' + (data.auto_half ? ' Because the day was short, it is counted as a half day.' : ''))
+          : 'You left at ' + hm(data.t_out) + '. Worked ' + hmm(hoursOf(data)) + '.' + (data.auto_half ? ' This was a short day. The owner will decide about a half day.' : ''))
       }
     } catch (e) { showMsg('Something went wrong: ' + (e.message || e)) }
     setBusy(false); load()
@@ -74,10 +74,12 @@ export function Punch({ empId }) {
         {state === 'load' && <p className="muted">Loading...</p>}
         {state === 'in' && <><p style={{ margin: '8px 0 12px' }}>You have not punched in yet.</p><button disabled={busy} style={{ ...big, background: '#16a34a', opacity: busy ? 0.6 : 1 }} onClick={() => go('in')}>{busy ? 'Checking location...' : "I'm in"}</button></>}
         {state === 'out' && <><p style={{ margin: '8px 0 12px' }}>In since <b>{hm(today.t_in)}</b>{lateBy(today, cfg) ? <span style={{ color: 'var(--bad)' }}> (late {lateBy(today, cfg)} min)</span> : ''}</p><button disabled={busy} style={{ ...big, background: '#dc2626', opacity: busy ? 0.6 : 1 }} onClick={() => go('out')}>{busy ? 'Checking location...' : "I'm leaving"}</button></>}
-        {state === 'done' && <p style={{ margin: '10px 0' }}>In <b>{hm(today.t_in)}</b> &middot; Out <b>{hm(today.t_out)}</b> &middot; <b>{hmm(hoursOf(today))}</b>{today.auto_half ? <span style={{ color: 'var(--bad)' }}> (half day)</span> : ''}<br /><span className="muted small">Done for today.</span></p>}
+        {state === 'done' && <p style={{ margin: '10px 0' }}>In <b>{hm(today.t_in)}</b> &middot; Out <b>{hm(today.t_out)}</b> &middot; <b>{hmm(hoursOf(today))}</b>{today.auto_half ? <span style={{ color: '#ea580c' }}> (short day)</span> : ''}<br /><span className="muted small">Done for today.</span></p>}
         {cfg && cfg.has_location && <p className="muted small" style={{ margin: '10px 0 0' }}>You can punch only at the shop (within {cfg.radius_m} m). Allow Location when the phone asks.</p>}
       </div>
       <MonthPick ym={ym} onChange={setYm} />
+      {rows && rows.length > 0 && (() => { const late = rows.filter((p) => lateBy(p, cfg) > 0).length, short = rows.filter((p) => p.auto_half).length, hrs = rows.reduce((a, p) => a + (hoursOf(p) || 0), 0); return (
+        <div className="minis" style={{ marginBottom: 10 }}><div className="mini"><span>Days in</span><b>{rows.length}</b></div><div className="mini"><span>Late</span><b>{late}</b></div><div className="mini"><span>Short days</span><b>{short}</b></div><div className="mini"><span>Hours</span><b>{Math.round(hrs)}</b></div></div>) })()}
       {rows && !rows.length && <p className="muted small">No punches in this month.</p>}
       {(rows || []).map((p) => (
         <div key={p.id} className="chartcard" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -96,7 +98,7 @@ export function AttSettings({ back }) {
   const set = (k, v) => setS({ ...s, [k]: v })
   const save = async (extra) => {
     setBusy(true)
-    const body = { start_time: s.start_time, grace_min: Number(s.grace_min), half_day_hours: Number(s.half_day_hours), radius_m: Number(s.radius_m), updated_at: new Date().toISOString(), ...extra }
+    const body = { start_time: s.start_time, grace_min: Number(s.grace_min), half_day_hours: Number(s.half_day_hours), weekly_off: s.weekly_off == null || s.weekly_off === '' ? null : Number(s.weekly_off), radius_m: Number(s.radius_m), updated_at: new Date().toISOString(), ...extra }
     const { error } = await supabase.from('shop_settings').update(body).eq('id', 1)
     setBusy(false)
     if (error) return showMsg('Could not save: ' + error.message)
@@ -115,8 +117,9 @@ export function AttSettings({ back }) {
       <div className="chartcard">
         <label style={row}><span>Shop opens at</span><input className="fsel" type="time" value={s.start_time ? s.start_time.slice(0, 5) : '09:30'} onChange={(e) => set('start_time', e.target.value)} /></label>
         <label style={row}><span>Grace before "late" (minutes)</span><input className="fsel" type="number" min="0" value={s.grace_min ?? 10} onChange={(e) => set('grace_min', e.target.value)} /></label>
-        <label style={row}><span>Counts as half day if less than (hours)</span><input className="fsel" type="number" min="0" step="0.5" value={s.half_day_hours ?? 4} onChange={(e) => set('half_day_hours', e.target.value)} /></label>
+        <label style={row}><span>Flag a day as SHORT if under (hours). Only a flag, pay is never changed</span><input className="fsel" type="number" min="0" step="0.5" value={s.half_day_hours ?? 4} onChange={(e) => set('half_day_hours', e.target.value)} /></label>
         <label style={row}><span>Allowed distance from shop (metres)</span><input className="fsel" type="number" min="30" value={s.radius_m ?? 150} onChange={(e) => set('radius_m', e.target.value)} /></label>
+        <label style={row}><span>Weekly off day</span><select className="fsel" value={s.weekly_off == null ? '' : s.weekly_off} onChange={(e) => set('weekly_off', e.target.value === '' ? null : Number(e.target.value))}>{['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((n, i) => <option key={i} value={i}>{n}</option>)}<option value="">Open every day</option></select></label>
         <button disabled={busy} onClick={() => save()}>Save</button>
       </div>
       <div className="chartcard" style={{ marginTop: 10 }}>
