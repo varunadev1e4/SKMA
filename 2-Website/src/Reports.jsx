@@ -3,6 +3,7 @@ import { fetchAll, rs, num } from './util'
 import ExportBar from './Export'
 import FullReport from './FullReport'
 import FilterSheet, { FilterBar, Sec } from './FilterSheet'
+import CompanyPick from './CompanyPick'
 
 const DIMS = { company: 'Company', party: 'Customer', product: 'Product', city: 'City', month: 'Month', day: 'Day', bill: 'Bill' }
 const QUICK = [['Customer-wise', ['party']], ['Company-wise', ['company']], ['Product-wise', ['product']], ['Company, then customer', ['company', 'party']], ['Customer, then company', ['party', 'company']], ['Company, then product', ['company', 'product']], ['City, then customer', ['city', 'party']], ['Day-wise', ['day']], ['Month-wise', ['month']]]
@@ -125,7 +126,7 @@ export default function Reports() {
         </Sec>
         <Sec title="Narrow down">
           <div className="fgrid" style={{ gridTemplateColumns: '1fr' }}>
-            <select value={company} onChange={(e) => setCompany(e.target.value)}><option value="">All companies</option>{companies.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+            <CompanyPick value={company} onChange={setCompany} companies={companies} />
             <input className="fsel" type="search" placeholder="Filter by name..." value={text} onChange={(e) => setText(e.target.value)} />
             {kind === 'S' && <select value={terms} onChange={(e) => setTerms(e.target.value)}><option value="all">Cash + credit</option><option value="1">Credit only</option><option value="0">Cash only</option></select>}
           </div>

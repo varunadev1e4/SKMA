@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchAll, num, rs } from './util'
 import ExportBar from './Export'
+import CompanyPick from './CompanyPick'
 
 // Same layout and rules as Profit Maker's "Stock & Sales Statement".
 //   Qoh   = stock on the "To" date  = stock now + sold after To - bought after To
@@ -84,7 +85,7 @@ export default function Statement({ stock }) {
       <div className="qchips">{PRESETS.map(([k, l]) => <button key={k} className={'qc' + (preset === k ? ' on' : '')} onClick={() => pick(k)}>{l}</button>)}</div>
       {preset === 'custom' && <div className="dates"><input type="date" value={from} max={to} onChange={(e) => setDates([e.target.value, to])} /><input type="date" value={to} min={from} onChange={(e) => setDates([from, e.target.value])} /></div>}
       <div className="fgrid" style={{ gridTemplateColumns: '1fr auto', marginTop: 10 }}>
-        <select value={company} onChange={(e) => setCompany(e.target.value)}><option value="">All companies</option>{companies.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+        <CompanyPick value={company} onChange={setCompany} companies={companies} />
         <button className={'toggle' + (hideZero ? ' on' : '')} onClick={() => setHideZero(!hideZero)}>Hide empty</button>
       </div>
       {!data && <p className="muted pad">Loading...</p>}

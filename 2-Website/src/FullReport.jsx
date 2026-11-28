@@ -3,6 +3,7 @@ import { fetchAll, num } from './util'
 import { BillBtn } from './BillShare'
 import ExportBar from './Export'
 import FilterSheet, { FilterBar, Sec } from './FilterSheet'
+import CompanyPick from './CompanyPick'
 
 // Same layout as Profit Maker's "Company Wise Customer Product Sales": company > customer > every bill line,
 // with quantity and free kept apart, the rate, the discount %, the rate after discount (with or without GST) and totals.
@@ -96,7 +97,7 @@ export default function FullReport() {
         </Sec>
         <Sec title="Narrow down">
           <div className="fgrid" style={{ gridTemplateColumns: '1fr' }}>
-            <select value={company} onChange={(e) => setCompany(e.target.value)}><option value="">All companies</option>{companies.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+            <CompanyPick value={company} onChange={setCompany} companies={companies} />
             <input className="fsel" type="search" placeholder="Filter by customer or product..." value={text} onChange={(e) => setText(e.target.value)} />
           </div>
         </Sec>

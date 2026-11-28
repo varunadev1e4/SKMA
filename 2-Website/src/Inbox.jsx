@@ -6,6 +6,7 @@ import MonthPick, { curYm, ymName } from './MonthPick'
 import { askConfirm, askPrompt, showMsg } from './dialog'
 import { iso, dm, span, money } from './expcommon'
 import { pushSupported, pushOn, enablePush, disablePush } from './push'
+import CompanyPick from './CompanyPick'
 
 // Owner's inbox for everything employees send: fund requests, reports and suggestions, return notes,
 // tasks, blind stock counts and delivered-bill tags. Saved only in this app, never in Profit Maker.
@@ -213,7 +214,7 @@ function NewCount({ back, created }) {
       <button className="ghost sm" onClick={back}>Back</button>
       <div className="chartcard" style={{ display: 'grid', gap: 8, marginTop: 10 }}>
         <input {...inp} placeholder="Sheet name (e.g. Rack 3)" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <select {...inp} value={company} onChange={(e) => setCompany(e.target.value)}><option value="">All companies</option>{companies.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+        <CompanyPick value={company} onChange={setCompany} companies={companies} />
         <input {...inp} placeholder="Rack starts with (optional)" value={rack} onChange={(e) => setRack(e.target.value)} />
         <input {...inp} placeholder="Product name contains (optional)" value={text} onChange={(e) => setText(e.target.value)} />
         <span className="muted small">{stock ? lines.length + ' batches match. Employees will see product, batch and expiry, not the system quantity.' : 'Loading stock...'}</span>

@@ -115,7 +115,7 @@ export function AttSettings({ back }) {
     <>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}><button className="ghost sm" onClick={back}>Back</button><h2 className="h2" style={{ margin: 0 }}>Attendance settings</h2></div>
       <div className="chartcard">
-        <label style={row}><span>Shop opens at</span><input className="fsel" type="time" value={s.start_time ? s.start_time.slice(0, 5) : '09:30'} onChange={(e) => set('start_time', e.target.value)} /></label>
+        <label style={row}><span>Shop opens at</span><input className="fsel" type="time" value={s.start_time ? s.start_time.slice(0, 5) : '10:00'} onChange={(e) => set('start_time', e.target.value)} /></label>
         <label style={row}><span>Grace before "late" (minutes)</span><input className="fsel" type="number" min="0" value={s.grace_min ?? 10} onChange={(e) => set('grace_min', e.target.value)} /></label>
         <label style={row}><span>Flag a day as SHORT if under (hours). Only a flag, pay is never changed</span><input className="fsel" type="number" min="0" step="0.5" value={s.half_day_hours ?? 4} onChange={(e) => set('half_day_hours', e.target.value)} /></label>
         <label style={row}><span>Allowed distance from shop (metres)</span><input className="fsel" type="number" min="30" value={s.radius_m ?? 150} onChange={(e) => set('radius_m', e.target.value)} /></label>

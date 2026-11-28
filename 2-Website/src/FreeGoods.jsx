@@ -4,6 +4,7 @@ import { exportPdf } from './exporter'
 import ExportBar from './Export'
 import FilterSheet, { FilterBar, Sec } from './FilterSheet'
 import { PRESETS, range, dmy, m2, r2 } from './dates'
+import CompanyPick from './CompanyPick'
 
 // Free goods given on sales bills: company > customer > bill lines, ready to send to each company every month.
 const COLS = ['Customer', 'Date', 'Bill', 'Product', 'Pack', 'Batch', 'Qty', 'Free', 'Rate', 'Free value']
@@ -86,7 +87,7 @@ export default function FreeGoods() {
         </Sec>
         <Sec title="Narrow down">
           <div className="fgrid" style={{ gridTemplateColumns: '1fr' }}>
-            <select value={company} onChange={(e) => setCompany(e.target.value)}><option value="">All companies</option>{companies.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+            <CompanyPick value={company} onChange={setCompany} companies={companies} />
             <input className="fsel" type="search" placeholder="Customer or product..." value={text} onChange={(e) => setText(e.target.value)} />
           </div>
         </Sec>
