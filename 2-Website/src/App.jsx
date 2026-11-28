@@ -110,7 +110,7 @@ function Home({ go, nInbox = 0 }) {
   useEffect(() => { load() }, [load])
   const h = new Date().getHours()
   const K = d && [['k1', 'To receive', rs(d.recv), d.nCust + ' parties', 'parties'], ['k2', 'To pay', rs(d.pay), d.nPay + ' parties', 'parties'],
-    ['k3', 'Items in stock', num(d.items), 'tap to browse', 'stock'], ['k4', 'Expiring soon', num(d.soon), 'within 3 months', 'expiry']]
+    ['k3', 'Stock & Sales', 'Statement', 'tap to open', 'stmt'], ['k4', 'Expiring soon', num(d.soon), 'within 3 months', 'expiry']]
   return (
     <div className="app">
       <header className="top">
@@ -389,7 +389,7 @@ function Shell() {
   // Phone Back: close the menu first, then go up one level (attendance and analytics go back to Staff, everything else to Home)
   useBackLayer(menu, () => setMenu(false))
   useBackLayer(tab !== 'home', () => go(tab === 'att' || tab === 'stats' ? 'staff' : 'home'))
-  const go = (t, side) => { if (side) setPs(side); if (t === 'expiry') { setSx('expiry'); t = 'stock' } else if (t === 'stock') setSx('stock'); setTab(t); window.scrollTo(0, 0) }
+  const go = (t, side) => { if (side) setPs(side); if (t === 'stmt') { try { const o = JSON.parse(localStorage.getItem('sb-insights') || '{}'); localStorage.setItem('sb-insights', JSON.stringify({ g: 'reports', t: { ...(o.t || {}), reports: 'stmt' } })) } catch { /* ignore */ } t = 'insights' } else if (t === 'expiry') { setSx('expiry'); t = 'stock' } else if (t === 'stock') setSx('stock'); setTab(t); window.scrollTo(0, 0) }
   // Only the open tab exists on the page; the others are created when you open them.
   const view = { home: <Home go={go} nInbox={nInbox} />, stock: <StockExpiry sx={sx} setSx={setSx} />, parties: <Parties side={ps} />, insights: <Insights />, temp: <TempBill back={() => go('home')} />, staff: <Staff back={() => go('home')} go={go} />, exp: <Expenses back={() => go('home')} go={go} />, att: <Attendance back={() => go('staff')} />, inbox: <Inbox back={() => go('home')} />, act: <ActivityPage back={() => go('home')} />, week: <WeeklySummary back={() => go('home')} />, about: <About back={() => go('home')} />, stats: <StaffStats back={() => go('staff')} />, ret: <TempReturn back={() => go('home')} />, col: <TempCollection back={() => go('home')} />, bill: <BillShare back={() => go('home')} /> }[tab]
   return (

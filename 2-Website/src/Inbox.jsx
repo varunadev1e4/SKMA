@@ -292,6 +292,8 @@ function FollowUp({ emps, onChange }) {
   const [creditOnly, setCreditOnly] = useState(false)
   const [rows, setRows] = useState(null)
   const [pick, setPick] = useState({})
+  const [typed, setTyped] = useState('')   // Desk: a bill number typed by hand (a bill the sync has not brought in yet)
+  const [typedEmp, setTypedEmp] = useState('')
   const [items, setItems] = useState({})   // bill number -> products on the bill (names and quantities only)
   const load = useCallback(async () => {
     setRows(null)
@@ -326,6 +328,20 @@ function FollowUp({ emps, onChange }) {
     if (error) return showMsg(error.message)
     load(); onChange && onChange()
   }
+  const assignTyped = async () => {
+    const b = norm(typed)
+    if (!b) return showMsg('Type the bill number.')
+    if (!typedEmp) return showMsg('Choose who is taking it out.')
+    const fy = fyOf(iso(new Date()))
+    const ex = await supabase.from('bill_tags').select('emp_id').eq('bill_no', b).eq('fy', fy).limit(1)
+    if (ex.error) return showMsg(ex.error.message)
+    if (ex.data && ex.data.length) { const w = emps.find((e) => e.id === ex.data[0].emp_id); return showMsg('Bill ' + b + ' is already out with ' + (w ? w.name : 'someone else') + '.') }
+    const seen = await supabase.from(BILL_TABLE).select('feed_no').in('feed_no', [b, typed.trim().toUpperCase()]).limit(1)
+    if (!(seen.data && seen.data.length) && !(await askConfirm('Bill ' + b + ' is not in the app yet (new bills arrive within about 30 minutes). Check the number. Send it out anyway?'))) return
+    const { error } = await supabase.from('bill_tags').insert({ emp_id: Number(typedEmp), bill_no: b, fy, d: iso(new Date()), assigned_by: 'desk' })
+    if (error) return showMsg(error.message)
+    setTyped(''); load(); onChange && onChange()
+  }
   const skip = async (r) => {
     const { error } = await supabase.from('delivery_skip').insert({ bill_no: norm(r.feed_no), fy: fyOf(r.d) })
     if (error) return showMsg(error.message + ' (run migration-27.sql)')
@@ -336,6 +352,12 @@ function FollowUp({ emps, onChange }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <h2 className="h2">{DESK_MODE ? 'Bills to send out' : 'Not yet delivered'}</h2>
+      {DESK_MODE && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+          <input {...inp} style={{ flex: 1, minWidth: 0 }} placeholder="Type bill number" value={typed} onChange={(e) => setTyped(e.target.value)} />
+          <select {...inp} style={{ flex: 1, minWidth: 0 }} value={typedEmp} onChange={(e) => setTypedEmp(e.target.value)}><option value="">Out with...</option>{emps.filter((e) => e.active !== false).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
+          <button className="ghost sm" onClick={assignTyped}>Send out</button>
+        </div>)}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
         {[3, 7, 14, 30].map((n) => <button key={n} className={'qc' + (days === n ? ' on' : '')} onClick={() => setDays(n)}>{n} days</button>)}
         <button className={'qc' + (creditOnly ? ' on' : '')} onClick={() => setCreditOnly(!creditOnly)}>Credit only</button>
