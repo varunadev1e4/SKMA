@@ -13,14 +13,16 @@ const ACT = { INSERT: 'added', UPDATE: 'changed', DELETE: 'deleted' }
 const FIELD = { amount: 'amount', category: 'category', note: 'note', d: 'date', salary: 'salary', name: 'name', role: 'role', status: 'status', kind: 'type', adv_cut: 'advance cut', leave_date: 'last day', leave_quota: 'leave quota', active: 'active', email: 'login email', bill_no: 'bill', t_in: 'came in', t_out: 'left', fixed_by: 'fixed by' }
 const val = (k, v) => (['t_in', 't_out', 'orig_in', 'orig_out'].includes(k) && v ? new Date(v).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : v == null || v === '' ? 'empty' : ['amount', 'salary', 'adv_cut'].includes(k) ? rs(Number(v)) : String(v))
 
+const KIND = { absent: 'absent', half: 'half day', paidleave: 'paid leave' }
 function describe(r) {
   const d = r.new_data || r.old_data || {}
+  const att = r.tbl === 'emp_entries' && KIND[d.kind]   // an attendance mark: the amount is days (0.5, 1), not rupees
   const what = TBL[r.tbl] || r.tbl
   if (r.action === 'UPDATE') {
     const ks = Object.keys(r.new_data || {}).filter((k) => !['created_at', 'updated_at'].includes(k))
-    return what + ' #' + r.row_id + ': ' + ks.map((k) => (FIELD[k] || k) + ' ' + val(k, (r.old_data || {})[k]) + ' to ' + val(k, r.new_data[k])).join(', ')
+    return what + ' #' + r.row_id + ': ' + ks.map((k) => (FIELD[k] || k) + ' ' + (att && k === 'amount' ? (r.old_data || {})[k] : val(k, (r.old_data || {})[k])) + ' to ' + (att && k === 'amount' ? r.new_data[k] : val(k, r.new_data[k]))).join(', ')
   }
-  const bits = [d.name, d.category, d.kind, d.email, d.bill_no, d.amount != null ? rs(Number(d.amount)) : null, d.d, d.note].filter((x) => x != null && x !== '')
+  const bits = [d.name, d.category, att ? KIND[d.kind] : d.kind, d.email, d.bill_no, d.amount != null && !att ? rs(Number(d.amount)) : null, d.d, d.note].filter((x) => x != null && x !== '')
   return what + ' ' + ACT[r.action] + (bits.length ? ': ' + bits.join(' | ') : '')
 }
 const DESK_TBL = ['shop_fund', 'expenses', 'emp_entries', 'fund_requests', 'bill_tags', 'counts', 'att_punches']

@@ -172,6 +172,7 @@ export default function StaffApp({ session, empId, desk, acct, stockScreen }) {
   const turnOn = async () => { const r = await enablePush('staff', empId); if (r === true) setPush('on'); else showMsg(r) }
   const [pwOpen, setPwOpen] = useState(false)
   const badge = { tasks: nTasks, count: nCount }
+  const dense = !!(desk || acct)   // many tiles: 3 or more per row so nobody has to scroll
 
   if (!emp && !err) return <p className="muted pad">Loading...</p>
   if (desk && tab === 'dattend') return <Attendance desk back={() => setTab('home')} />
@@ -197,12 +198,12 @@ export default function StaffApp({ session, empId, desk, acct, stockScreen }) {
           <div className="chartcard" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '10px 0' }}>
             <span>Shop fund balance</span><b style={{ fontSize: 22, color: balance != null && balance < 0 ? 'var(--bad)' : undefined }}>{balance == null ? '...' : rs(balance)}</b>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: dense ? 'repeat(auto-fill, minmax(96px, 1fr))' : '1fr 1fr', gap: dense ? 6 : 8 }}>
             {[...(desk ? DESK_TILES : []), ...(acct ? ACCT_TILES : []), ...TILES].filter((x) => !(x[0] === 'punch' && emp.no_attendance)).map(([k, l, s, c, ic]) => (
-              <button key={k} className="chartcard" style={{ textAlign: 'left', border: 0, display: 'grid', gap: 4, minHeight: 104, background: c, color: '#fff', alignContent: 'start' }} onClick={() => setTab(k)}>
-                <span style={{ fontSize: 34, lineHeight: 1 }}>{ic}</span>
-                <b style={{ fontSize: 16 }}>{l}{badge[k] > 0 ? <span style={{ background: '#fff', color: c, borderRadius: 10, padding: '0 7px', marginLeft: 6, fontSize: 13 }}>{badge[k]}</span> : ''}</b>
-                <span style={{ fontSize: 12, opacity: 0.92 }}>{k === 'tasks' ? (nTasks ? nTasks + ' to do' : 'Nothing pending') : k === 'count' ? (nCount ? nCount + ' count sheet(s)' : 'None right now') : k === 'att' ? 'Present, leave, balance' : s}</span>
+              <button key={k} className="chartcard" style={{ textAlign: 'left', border: 0, display: 'grid', gap: dense ? 2 : 4, minHeight: dense ? 86 : 104, padding: dense ? 8 : undefined, background: c, color: '#fff', alignContent: 'start' }} onClick={() => setTab(k)}>
+                <span style={{ fontSize: dense ? 24 : 34, lineHeight: 1 }}>{ic}</span>
+                <b style={{ fontSize: dense ? 13 : 16, lineHeight: 1.15 }}>{l}{badge[k] > 0 ? <span style={{ background: '#fff', color: c, borderRadius: 10, padding: '0 7px', marginLeft: 6, fontSize: 13 }}>{badge[k]}</span> : ''}</b>
+                <span style={{ fontSize: dense ? 10 : 12, lineHeight: 1.2, opacity: 0.92 }}>{k === 'tasks' ? (nTasks ? nTasks + ' to do' : 'Nothing pending') : k === 'count' ? (nCount ? nCount + ' count sheet(s)' : 'None right now') : k === 'att' ? 'Present, leave, balance' : s}</span>
               </button>))}
           </div>
           {push === 'ask' && <button className="ghost" style={{ marginTop: 12 }} onClick={turnOn}>Turn on notifications</button>}

@@ -144,6 +144,7 @@ function TimesReport({ back, cfg }) {
   const [ents, setEnts] = useState([])
   const [emps, setEmps] = useState([])
   const sp = span(ym)
+  const [openN, setOpenN] = useState('')
   useEffect(() => {
     setRows(null)
     Promise.all([
@@ -175,13 +176,17 @@ function TimesReport({ back, cfg }) {
       if (ps.some((p) => p.d === d) || es.some((x) => x.d === d)) continue
       noPunch.push(n)
     }
-    return { name: e.name, active: e.active, any: ps.length || es.length, days: ps.length, absent: absent.map(dayN), half: half.map(dayN), pl: pl.map(dayN), short: shortD.map((p) => Number(p.d.slice(8, 10))), late: lateD.map((p) => Number(p.d.slice(8, 10))), open: open.map((p) => Number(p.d.slice(8, 10))), noPunch, hrs, avg: done.length ? hrs / done.length : 0 }
+    return { id: e.id, name: e.name, active: e.active, any: ps.length || es.length, days: ps.length, absent: absent.map(dayN), half: half.map(dayN), pl: pl.map(dayN), short: shortD.map((p) => Number(p.d.slice(8, 10))), late: lateD.map((p) => Number(p.d.slice(8, 10))), open: open.map((p) => Number(p.d.slice(8, 10))), noPunch, hrs, avg: done.length ? hrs / done.length : 0 }
   }).filter((l) => l.active || l.any)
   const sum = (a) => a.length
   const lst = (a) => (a.length ? ' (' + a.join(', ') + ')' : '')
   const build = () => ({ title: 'Attendance summary', subtitle: ymName(ym) + ' (numbers only, for deciding pay)', filename: 'attendance-summary-' + ym,
     columns: ['Name', 'Absent', 'Half days', 'Paid leave', 'Short days', 'Late days', 'No punch, not marked', 'Not punched out', 'Days punched', 'Total hours'],
     rows: lines.map((l) => [l.name, sum(l.absent), sum(l.half), sum(l.pl), sum(l.short), sum(l.late), sum(l.noPunch), sum(l.open), l.days, l.hrs.toFixed(1)]), numCols: [1, 2, 3, 4, 5, 6, 7, 8, 9] })
+  const nameOf = (id) => ((emps || []).find((e) => e.id === id) || {}).name || '#' + id
+  const buildDaily = () => ({ title: 'Arrival and leaving times', subtitle: ymName(ym), filename: 'punch-times-' + ym,
+    columns: ['Date', 'Name', 'In', 'Out', 'Hours', 'Late (min)', 'Short day', 'Fixed by'],
+    rows: [...(rows || [])].sort((a, b) => a.d.localeCompare(b.d) || nameOf(a.emp_id).localeCompare(nameOf(b.emp_id))).map((p) => [dm(p.d), nameOf(p.emp_id), hm(p.t_in), p.t_out ? hm(p.t_out) : (p.d < today ? 'not punched out' : ''), hoursOf(p) != null ? hoursOf(p).toFixed(2) : '', lateBy(p, cfg) || '', p.auto_half ? 'yes' : '', p.fixed_by ? p.fixed_by.split('@')[0] : '']), numCols: [4, 5] })
   const Mini = ({ k, v, warn }) => <div className="mini"><span>{k}</span><b style={{ color: warn && v ? '#ea580c' : undefined }}>{v}</b></div>
   return (
     <>
@@ -190,7 +195,7 @@ function TimesReport({ back, cfg }) {
       <MonthPick ym={ym} onChange={setYm} />
       {!rows && <p className="muted pad">Loading...</p>}
       {rows && !lines.length && <div className="empty"><b>No data this month</b></div>}
-      {lines.length > 0 && <ExportBar build={build} />}
+      {lines.length > 0 && <><ExportBar build={build} /><p className="muted small" style={{ margin: '0 0 4px' }}>Every in and out time of the month, for all people:</p><ExportBar build={buildDaily} /></>}
       {lines.map((l) => (
         <div key={l.name} className="chartcard" style={{ marginBottom: 8 }}>
           <b>{l.name}</b>
@@ -209,6 +214,15 @@ function TimesReport({ back, cfg }) {
             {sum(l.open) > 0 && <div style={{ color: '#ea580c' }}>Forgot to punch out{lst(l.open)}</div>}
             {l.days > 0 && <div>{l.days} days punched | {hmm(l.hrs)} worked | average {hmm(l.avg)} a day</div>}
           </div>
+          {l.days > 0 && <button className="ghost sm" style={{ marginTop: 6 }} onClick={() => setOpenN(openN === l.name ? '' : l.name)}>{openN === l.name ? 'Hide daily times' : 'Show daily times'}</button>}
+          {openN === l.name && (
+            <div style={{ marginTop: 6 }}>
+              {(rows || []).filter((p) => p.emp_id === l.id).sort((a, b) => a.d.localeCompare(b.d)).map((p) => (
+                <div key={p.id} className="small" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0', borderTop: '1px solid var(--line)' }}>
+                  <b>{dm(p.d)}</b>
+                  <span>{hm(p.t_in) || '--'} to {p.t_out ? hm(p.t_out) : (p.d < today ? <b style={{ color: '#ea580c' }}>not punched out</b> : 'still in')}{hoursOf(p) != null ? ' | ' + hmm(hoursOf(p)) : ''}{lateBy(p, cfg) ? <span style={{ color: 'var(--bad)' }}> | late {lateBy(p, cfg)}m</span> : ''}{p.auto_half ? <span style={{ color: '#ea580c' }}> | short</span> : ''}{p.fixed_at ? <span className="muted"> | fixed</span> : ''}</span>
+                </div>))}
+            </div>)}
         </div>))}
     </>)
 }

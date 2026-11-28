@@ -347,7 +347,7 @@ function FollowUp({ emps, onChange }) {
         <div key={r.feed_no + r.d} className="chartcard" style={{ marginBottom: 6, display: 'grid', gap: 6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span><b>{r.feed_no}</b> <span className="muted small">{dm(r.d)} | {r.typ || ''}</span><br /><span className="muted small">{r.party}{r.city ? ', ' + r.city : ''}</span>{items[norm(r.feed_no)] && <><br /><span className="small">{items[norm(r.feed_no)]}</span></>}</span>{!DESK_MODE && <b>{rs(r.net)}</b>}</div>
           <div style={{ display: 'flex', gap: 6 }}>
-            <select {...inp} style={{ flex: 1 }} value={pick[r.feed_no] || ''} onChange={(e) => setPick({ ...pick, [r.feed_no]: e.target.value })}><option value="">{DESK_MODE ? 'Out for delivery with...' : 'Delivered by...'}</option>{emps.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
+            <select {...inp} style={{ flex: 1 }} value={pick[r.feed_no] || ''} onChange={(e) => setPick({ ...pick, [r.feed_no]: e.target.value })}><option value="">{DESK_MODE ? 'Out for delivery with...' : 'Delivered by...'}</option>{emps.filter((e) => e.active !== false).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
             <button className="ghost sm" onClick={() => assign(r)}>{DESK_MODE ? 'Send out' : 'Assign'}</button>
             <button className="ghost sm" onClick={() => skip(r)}>No delivery</button>
           </div>
@@ -362,11 +362,13 @@ function Deliveries() {
   const [heads, setHeads] = useState({})
   const [emps, setEmps] = useState([])
   const [who, setWho] = useState('')
+  const [tick, setTick] = useState(0)
+  const [edit, setEdit] = useState(null)   // { id, emp } while changing who took a bill
   useEffect(() => {
     setTags(null)
     ;(async () => {
       const s = span(ym)
-      const [a, e] = await Promise.all([fetchPaged('bill_tags', '*', (q) => q.gte('d', s.from).lte('d', s.to)).then((data) => ({ data: data.sort((x, y) => String(y.d).localeCompare(String(x.d)) || y.id - x.id) })).catch((error) => ({ error })), supabase.from('employees').select('id,name')])
+      const [a, e] = await Promise.all([fetchPaged('bill_tags', '*', (q) => q.gte('d', s.from).lte('d', s.to)).then((data) => ({ data: data.sort((x, y) => String(y.d).localeCompare(String(x.d)) || y.id - x.id) })).catch((error) => ({ error })), supabase.from(EMP_TABLE).select('id,name,active')])
       if (a.error) { showMsg(a.error.message + ' (run migration-25.sql)'); return setTags([]) }
       setTags(a.data); setEmps(e.data || [])
       const nos = [...new Set(a.data.map((t) => t.bill_no))], h = {}
@@ -376,15 +378,27 @@ function Deliveries() {
       }
       setHeads(h)
     })()
-  }, [ym])
+  }, [ym, tick])
   const name = (id) => (emps.find((e) => e.id === id) || {}).name || '?'
+  const change = async (t) => {
+    if (!edit || !edit.emp) return showMsg('Choose the correct person.')
+    const { error } = await supabase.from('bill_tags').update({ emp_id: Number(edit.emp), assigned_by: DESK_MODE ? 'desk' : 'owner' }).eq('id', t.id)
+    if (error) return showMsg(error.message)
+    setEdit(null); setTick((v) => v + 1)
+  }
+  const remove = async (t) => {
+    if (!(await askConfirm('Remove ' + t.bill_no + ' from ' + name(t.emp_id) + '? The bill goes back to Bills to send out.'))) return
+    const { error } = await supabase.from('bill_tags').delete().eq('id', t.id)
+    if (error) return showMsg(error.message)
+    setTick((v) => v + 1)
+  }
   const list = (tags || []).filter((t) => !who || String(t.emp_id) === who)
   const per = useMemo(() => { const m = new Map(); (tags || []).forEach((t) => m.set(t.emp_id, (m.get(t.emp_id) || 0) + 1)); return [...m] }, [tags])
   const build = () => ({ title: 'Delivered bills: ' + ymName(ym) + (who ? ' | ' + name(Number(who)) : ''), subtitle: list.length + ' bills', filename: 'deliveries-' + ym, columns: ['Date', 'Bill', 'Customer', 'Amount', 'Delivered by'],
     rows: list.map((t) => { const h = heads[t.bill_no]; return [dm(t.d), t.bill_no, h ? h.party : '', h && !DESK_MODE ? money(h.net) : '', name(t.emp_id)] }), numCols: [3] })
   return (
     <>
-      <FollowUp emps={emps} onChange={() => setYm((v) => v)} />
+      <FollowUp emps={emps} onChange={() => setTick((v) => v + 1)} />
       <h2 className="h2">Delivered</h2>
       <MonthPick ym={ym} onChange={setYm} />
       {!tags && <p className="muted pad">Loading...</p>}
@@ -394,8 +408,18 @@ function Deliveries() {
       </div>}
       {list.length > 0 && <ExportBar build={build} />}
       {list.map((t) => { const h = heads[t.bill_no]; return (
-        <div key={t.id} className="chartcard" style={{ marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span><b>{t.bill_no}</b> <span className="muted small">{dm(t.d)} | {name(t.emp_id)}</span><br /><span className="muted small">{h ? h.party : 'not in the app yet'}</span></span><b>{h && !DESK_MODE ? rs(h.net) : ''}</b>
+        <div key={t.id} className="chartcard" style={{ marginBottom: 6, display: 'grid', gap: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span><b>{t.bill_no}</b> <span className="muted small">{dm(t.d)} | {name(t.emp_id)}</span><br /><span className="muted small">{h ? h.party : 'not in the app yet'}</span></span><b>{h && !DESK_MODE ? rs(h.net) : ''}</b>
+          </div>
+          {edit && edit.id === t.id ? (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select {...inp} style={{ flex: 1 }} value={edit.emp} onChange={(e) => setEdit({ ...edit, emp: e.target.value })}><option value="">Correct person...</option>{emps.filter((e) => e.active !== false || e.id === t.emp_id).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
+              <button className="sm" onClick={() => change(t)}>Save</button><button className="ghost sm" onClick={() => setEdit(null)}>Cancel</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6 }}><button className="ghost sm" onClick={() => setEdit({ id: t.id, emp: '' })}>Change person</button><button className="ghost sm" onClick={() => remove(t)}>Remove</button></div>
+          )}
         </div>) })}
     </>)
 }
